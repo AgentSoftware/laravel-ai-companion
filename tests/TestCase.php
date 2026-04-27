@@ -5,14 +5,22 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiTokenTracker\Tests;
 
 use AgentSoftware\LaravelAiTokenTracker\LaravelAiTokenTrackerServiceProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
 {
+    use RefreshDatabase;
+
     protected function getPackageProviders($app): array
     {
         return [
             LaravelAiTokenTrackerServiceProvider::class,
         ];
+    }
+
+    protected function defineDatabaseMigrations(): void
+    {
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
     }
 }
