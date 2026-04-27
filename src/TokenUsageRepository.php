@@ -32,10 +32,10 @@ class TokenUsageRepository
             ->first();
 
         return [
-            'input_tokens' => (int) ($row?->input_tokens ?? 0),
-            'output_tokens' => (int) ($row?->output_tokens ?? 0),
-            'cache_write_tokens' => (int) ($row?->cache_write_tokens ?? 0),
-            'cache_read_tokens' => (int) ($row?->cache_read_tokens ?? 0),
+            'input_tokens' => (int) ($row !== null ? $row->input_tokens : 0),
+            'output_tokens' => (int) ($row !== null ? $row->output_tokens : 0),
+            'cache_write_tokens' => (int) ($row !== null ? $row->cache_write_tokens : 0),
+            'cache_read_tokens' => (int) ($row !== null ? $row->cache_read_tokens : 0),
         ];
     }
 
@@ -56,6 +56,7 @@ class TokenUsageRepository
             ->all();
     }
 
+    /** @return Builder<AiTokenUsage> */
     private function baseQuery(): Builder
     {
         $query = AiTokenUsage::query();
