@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Facade;
 /**
  * @method static array{input_tokens: int, output_tokens: int, cache_write_tokens: int, cache_read_tokens: int} total()
  * @method static TokenUsageRepository forAgent(string $agentClass)
+ * @method static TokenUsageRepository forSource(string $sourceId)
  * @method static array<string, array{input_tokens: int, output_tokens: int, cache_write_tokens: int, cache_read_tokens: int}> byAgent()
  *
  * @see TokenUsageRepository

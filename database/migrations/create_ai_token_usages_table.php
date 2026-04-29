@@ -18,6 +18,7 @@ return new class extends Migration
             $table->unsignedInteger('output_tokens')->default(0);
             $table->unsignedInteger('cache_write_tokens')->default(0);
             $table->unsignedInteger('cache_read_tokens')->default(0);
+            $table->uuid('source_id')->nullable();
             $table->timestamps();
         });
     }

@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $output_tokens
  * @property int $cache_write_tokens
  * @property int $cache_read_tokens
+ * @property string|null $source_id
  */
 class AiTokenUsage extends Model
 {
@@ -27,5 +28,6 @@ class AiTokenUsage extends Model
         'output_tokens',
         'cache_write_tokens',
         'cache_read_tokens',
+        'source_id',
     ];
 }

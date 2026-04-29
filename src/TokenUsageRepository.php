@@ -11,10 +11,20 @@ class TokenUsageRepository
 {
     private ?string $agentFilter = null;
 
+    private ?string $sourceFilter = null;
+
     public function forAgent(string $agentClass): static
     {
         $clone = clone $this;
         $clone->agentFilter = $agentClass;
+
+        return $clone;
+    }
+
+    public function forSource(string $sourceId): static
+    {
+        $clone = clone $this;
+        $clone->sourceFilter = $sourceId;
 
         return $clone;
     }
@@ -63,6 +73,10 @@ class TokenUsageRepository
 
         if ($this->agentFilter !== null) {
             $query->where('agent', $this->agentFilter);
+        }
+
+        if ($this->sourceFilter !== null) {
+            $query->where('source_id', $this->sourceFilter);
         }
 
         return $query;
