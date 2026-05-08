@@ -16,7 +16,10 @@ class LaravelAiTokenTrackerServiceProvider extends PackageServiceProvider
     {
         $package
             ->name('laravel-ai-token-tracker')
-            ->hasMigration('create_ai_token_usages_table');
+            ->hasMigrations([
+                'create_ai_token_usages_table',
+                'add_source_model_prompt_response_to_ai_token_usages_table',
+            ]);
     }
 
     public function packageBooted(): void
