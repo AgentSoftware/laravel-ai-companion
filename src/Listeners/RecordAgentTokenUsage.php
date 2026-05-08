@@ -22,6 +22,9 @@ readonly class RecordAgentTokenUsage
             'cache_write_tokens' => $usage->cacheWriteInputTokens,
             'cache_read_tokens' => $usage->cacheReadInputTokens,
             'source_id' => Context::get('ai_usage_source_id'),
+            'source_model' => Context::get('ai_usage_source_model'),
+            'prompt' => $event->prompt->prompt,
+            'response' => $event->response->text,
         ]);
     }
 }
