@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace AgentSoftware\LaravelAiTokenTracker\Listeners;
+namespace AgentSoftware\LaravelAiCompanion\Listeners;
 
-use AgentSoftware\LaravelAiTokenTracker\Models\AiTokenUsage;
+use AgentSoftware\LaravelAiCompanion\Models\AiTokenUsage;
 use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Events\AgentPrompted;
 
@@ -23,8 +23,6 @@ readonly class RecordAgentTokenUsage
             'cache_read_tokens' => $usage->cacheReadInputTokens,
             'source_id' => Context::get('ai_usage_source_id'),
             'source_model' => Context::get('ai_usage_source_model'),
-            'prompt' => $event->prompt->prompt,
-            'response' => $event->response->text,
         ]);
     }
 }

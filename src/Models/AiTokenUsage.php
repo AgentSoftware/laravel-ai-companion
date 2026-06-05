@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AgentSoftware\LaravelAiTokenTracker\Models;
+namespace AgentSoftware\LaravelAiCompanion\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -18,8 +18,6 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property int $cache_read_tokens
  * @property string|null $source_id
  * @property string|null $source_model
- * @property string|null $prompt
- * @property string|null $response
  */
 class AiTokenUsage extends Model
 {
@@ -34,8 +32,6 @@ class AiTokenUsage extends Model
         'cache_read_tokens',
         'source_id',
         'source_model',
-        'prompt',
-        'response',
     ];
 
     /**
