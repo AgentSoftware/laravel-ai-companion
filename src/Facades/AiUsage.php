@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace AgentSoftware\LaravelAiTokenTracker\Facades;
+namespace AgentSoftware\LaravelAiCompanion\Facades;
 
-use AgentSoftware\LaravelAiTokenTracker\TokenUsageRepository;
+use AgentSoftware\LaravelAiCompanion\TokenUsageRepository;
 use Illuminate\Support\Facades\Facade;
 
 /**

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use AgentSoftware\LaravelAiTokenTracker\Facades\AiUsage;
-use AgentSoftware\LaravelAiTokenTracker\Models\AiTokenUsage;
+use AgentSoftware\LaravelAiCompanion\Facades\AiUsage;
+use AgentSoftware\LaravelAiCompanion\Models\AiTokenUsage;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 beforeEach(function () {

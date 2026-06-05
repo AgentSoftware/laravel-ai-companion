@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace AgentSoftware\LaravelAiTokenTracker;
+namespace AgentSoftware\LaravelAiCompanion;
 
-use AgentSoftware\LaravelAiTokenTracker\Models\AiTokenUsage;
+use AgentSoftware\LaravelAiCompanion\Models\AiTokenUsage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 

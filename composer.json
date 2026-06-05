@@ -1,8 +1,8 @@
 {
-    "name": "agentsoftware/laravel-ai-token-tracker",
-    "description": "Automatically track Laravel AI SDK token usage",
-    "keywords": ["laravel", "ai", "tokens", "tracking"],
-    "homepage": "https://github.com/agentsoftware/laravel-ai-token-tracker",
+    "name": "agentsoftware/laravel-ai-companion",
+    "description": "Laravel AI SDK companion: automatic token usage tracking and opt-in response logging",
+    "keywords": ["laravel", "ai", "tokens", "tracking", "logging"],
+    "homepage": "https://github.com/agentsoftware/laravel-ai-companion",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -22,21 +22,21 @@
     },
     "autoload": {
         "psr-4": {
-            "AgentSoftware\\LaravelAiTokenTracker\\": "src/"
+            "AgentSoftware\\LaravelAiCompanion\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "AgentSoftware\\LaravelAiTokenTracker\\Tests\\": "tests/"
+            "AgentSoftware\\LaravelAiCompanion\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "AgentSoftware\\LaravelAiTokenTracker\\LaravelAiTokenTrackerServiceProvider"
+                "AgentSoftware\\LaravelAiCompanion\\LaravelAiCompanionServiceProvider"
             ],
             "aliases": {
-                "AiUsage": "AgentSoftware\\LaravelAiTokenTracker\\Facades\\AiUsage"
+                "AiUsage": "AgentSoftware\\LaravelAiCompanion\\Facades\\AiUsage"
             }
         }
     },

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use AgentSoftware\LaravelAiTokenTracker\Models\AiTokenUsage;
+use AgentSoftware\LaravelAiCompanion\Models\AiTokenUsage;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Contracts\Agent;
@@ -98,14 +98,6 @@ it('records token usage when an agent is prompted', function () {
         ->and($record->cache_write_tokens)->toBe(10)
         ->and($record->cache_read_tokens)->toBe(5)
         ->and($record->model)->toBe('claude-haiku-4-5-20251001');
-});
-
-it('records prompt and response text', function () {
-    event(makeAgentPromptedEvent(promptText: 'Analyse this page', responseText: 'The page contains...'));
-
-    $record = AiTokenUsage::first();
-    expect($record->prompt)->toBe('Analyse this page')
-        ->and($record->response)->toBe('The page contains...');
 });
 
 it('records source_model from context', function () {

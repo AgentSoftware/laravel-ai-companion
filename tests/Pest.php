@@ -1,6 +1,6 @@
 <?php
 
 declare(strict_types=1);
-use AgentSoftware\LaravelAiTokenTracker\Tests\TestCase;
+use AgentSoftware\LaravelAiCompanion\Tests\TestCase;
 
 uses(TestCase::class)->in('Feature');
