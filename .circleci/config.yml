@@ -1,0 +1,75 @@
+version: 2.1
+
+commands:
+  install-deps:
+    parameters:
+      dependency-version:
+        type: enum
+        enum: ["prefer-lowest", "prefer-stable"]
+        default: "prefer-stable"
+      php-version:
+        type: string
+        default: "8.5"
+    steps:
+      - run:
+          name: Enable pcov
+          command: sudo docker-php-ext-enable pcov || true
+      - restore_cache:
+          keys:
+            - composer-v1-php<< parameters.php-version >>-{{ checksum "composer.json" }}-<< parameters.dependency-version >>
+            - composer-v1-php<< parameters.php-version >>-{{ checksum "composer.json" }}-
+      - run:
+          name: Install Composer dependencies (<< parameters.dependency-version >>)
+          command: composer update --<< parameters.dependency-version >> --no-interaction --prefer-dist
+      - save_cache:
+          key: composer-v1-php<< parameters.php-version >>-{{ checksum "composer.json" }}-<< parameters.dependency-version >>
+          paths:
+            - vendor
+
+jobs:
+  tests:
+    parameters:
+      php-version:
+        type: enum
+        enum: ["8.4", "8.5"]
+      dependency-version:
+        type: enum
+        enum: ["prefer-lowest", "prefer-stable"]
+    docker:
+      - image: cimg/php:<< parameters.php-version >>
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - install-deps:
+          dependency-version: << parameters.dependency-version >>
+          php-version: << parameters.php-version >>
+      - run:
+          name: Unit Tests
+          command: composer test:unit
+
+  formats:
+    docker:
+      - image: cimg/php:8.5
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - install-deps
+      - run:
+          name: Coding Style Checks
+          command: composer test:lint
+      - run:
+          name: Type Checks
+          command: composer test:types
+      - run:
+          name: Type Coverage Checks
+          command: composer test:type-coverage
+
+workflows:
+  ci:
+    jobs:
+      - tests:
+          matrix:
+            parameters:
+              php-version: ["8.4", "8.5"]
+              dependency-version: ["prefer-lowest", "prefer-stable"]
+      - formats
