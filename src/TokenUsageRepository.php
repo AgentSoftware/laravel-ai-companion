@@ -6,6 +6,7 @@ namespace AgentSoftware\LaravelAiTokenTracker;
 
 use AgentSoftware\LaravelAiTokenTracker\Models\AiTokenUsage;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class TokenUsageRepository
 {
@@ -57,7 +58,7 @@ class TokenUsageRepository
             ->groupBy('agent')
             ->get()
             ->keyBy('agent')
-            ->map(fn ($row) => [
+            ->map(fn (Model $row) => [
                 'input_tokens' => (int) $row->input_tokens,
                 'output_tokens' => (int) $row->output_tokens,
                 'cache_write_tokens' => (int) $row->cache_write_tokens,

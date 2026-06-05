@@ -7,6 +7,7 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
@@ -38,32 +39,32 @@ function makeAgentPromptedEvent(string $promptText = 'Hello', string $responseTe
             return 'instructions';
         }
 
-        public function prompt(string $prompt, array $attachments = [], ?string $provider = null, ?string $model = null): AgentResponse
+        public function prompt(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): AgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function stream(string $prompt, array $attachments = [], array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
+        public function stream(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function queue(string $prompt, array $attachments = [], array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
+        public function queue(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function broadcast(string $prompt, Channel|array $channels, array $attachments = [], bool $now = false, ?string $provider = null, ?string $model = null): StreamableAgentResponse
+        public function broadcast(string $prompt, Channel|array $channels, array $attachments = [], bool $now = false, Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function broadcastNow(string $prompt, Channel|array $channels, array $attachments = [], ?string $provider = null, ?string $model = null): StreamableAgentResponse
+        public function broadcastNow(string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function broadcastOnQueue(string $prompt, Channel|array $channels, array $attachments = [], ?string $provider = null, ?string $model = null): QueuedAgentResponse
+        public function broadcastOnQueue(string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
