@@ -39,12 +39,12 @@ function makeAgentPromptedEvent(string $promptText = 'Hello', string $responseTe
             return 'instructions';
         }
 
-        public function prompt(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): AgentResponse
+        public function prompt(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): AgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function stream(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
+        public function stream(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): StreamableAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
