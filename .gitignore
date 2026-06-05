@@ -2,5 +2,6 @@
 /node_modules/
 /.phpunit.result.cache
 /.phpunit.cache
+/composer.lock
 Thumbs.db
 .DS_Store

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use AgentSoftware\LaravelAiTokenTracker\Facades\AiUsage;
 use AgentSoftware\LaravelAiTokenTracker\Models\AiTokenUsage;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 beforeEach(function () {
     AiTokenUsage::create([
@@ -47,4 +48,28 @@ it('returns totals grouped by agent', function () {
     expect($byAgent)->toHaveCount(2)
         ->and($byAgent['App\\Ai\\Agents\\FooAgent']['input_tokens'])->toBe(100)
         ->and($byAgent['App\\Ai\\Agents\\BarAgent']['input_tokens'])->toBe(200);
+});
+
+it('exposes a polymorphic source relation', function () {
+    $usage = AiTokenUsage::first();
+
+    expect($usage->source())->toBeInstanceOf(MorphTo::class);
+});
+
+it('returns totals scoped to a specific source', function () {
+    AiTokenUsage::create([
+        'agent' => 'App\\Ai\\Agents\\FooAgent',
+        'model' => 'claude-haiku-4-5-20251001',
+        'input_tokens' => 7,
+        'output_tokens' => 3,
+        'cache_write_tokens' => 0,
+        'cache_read_tokens' => 0,
+        'source_id' => 'session-abc',
+        'source_model' => 'App\\Models\\OnboardingSession',
+    ]);
+
+    $totals = AiUsage::forSource('session-abc')->total();
+
+    expect($totals['input_tokens'])->toBe(7)
+        ->and($totals['output_tokens'])->toBe(3);
 });

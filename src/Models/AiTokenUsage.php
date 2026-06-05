@@ -38,6 +38,9 @@ class AiTokenUsage extends Model
         'response',
     ];
 
+    /**
+     * @return MorphTo<Model, $this>
+     */
     public function source(): MorphTo
     {
         return $this->morphTo(__FUNCTION__, 'source_model', 'source_id');
