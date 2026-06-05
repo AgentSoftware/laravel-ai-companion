@@ -19,12 +19,7 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
-            ->hasMigrations([
-                'create_ai_token_usages_table',
-                'add_source_model_prompt_response_to_ai_token_usages_table',
-                'drop_prompt_response_from_ai_token_usages_table',
-                'create_ai_response_logs_table',
-            ]);
+            ->discoversMigrations();
     }
 
     public function packageBooted(): void
