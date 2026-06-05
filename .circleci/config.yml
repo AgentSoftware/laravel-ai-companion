@@ -11,11 +11,6 @@ commands:
         type: string
         default: "8.5"
     steps:
-      - run:
-          name: Install pcov
-          command: |
-            sudo apt-get update -qq
-            sudo apt-get install -y php<< parameters.php-version >>-pcov
       - restore_cache:
           keys:
             - composer-v1-php<< parameters.php-version >>-{{ checksum "composer.json" }}-<< parameters.dependency-version >>
@@ -42,6 +37,15 @@ jobs:
     working_directory: ~/repo
     steps:
       - checkout
+      - run:
+          name: Install pcov
+          command: |
+            sudo pecl install pcov
+            if ! php -m | grep -qi pcov; then
+              CONFD=$(php -r 'echo PHP_CONFIG_FILE_SCAN_DIR;')
+              echo "extension=pcov.so" | sudo tee "$CONFD/30-pcov.ini"
+            fi
+            php -m | grep -qi pcov
       - install-deps:
           dependency-version: << parameters.dependency-version >>
           php-version: << parameters.php-version >>
