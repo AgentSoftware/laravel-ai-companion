@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
 
 it('prunes rows older than the configured window', function () {
@@ -26,6 +27,17 @@ it('prunes rows older than the configured window', function () {
 
     expect(AiResponseLog::find($old->id))->toBeNull()
         ->and(AiResponseLog::find($recent->id))->not->toBeNull();
+});
+
+it('registers the prune command on the Laravel schedule', function () {
+    $schedule = app(Schedule::class);
+
+    $hasPruneEvent = collect($schedule->events())->contains(
+        fn ($event) => str_contains((string) $event->command, 'model:prune')
+            && str_contains((string) $event->command, 'AiResponseLog')
+    );
+
+    expect($hasPruneEvent)->toBeTrue();
 });
 
 it('honours a custom prune window from config', function () {
