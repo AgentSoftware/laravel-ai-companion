@@ -118,15 +118,15 @@ class EvaluateCommand extends Command
         }
 
         $this->newLine();
-        $this->printSummary($agent, $evaluated, $skipped);
+        $this->printSummary($agent, $evaluated, $skipped, (int) $this->option('limit'));
     }
 
-    private function printSummary(string $agent, int $evaluated, int $skipped): void
+    private function printSummary(string $agent, int $evaluated, int $skipped, int $limit): void
     {
         $evaluations = AiEvaluation::query()
             ->where('agent', $agent)
             ->latest()
-            ->limit(50)
+            ->limit($limit)
             ->get();
 
         if ($evaluations->isEmpty()) {
