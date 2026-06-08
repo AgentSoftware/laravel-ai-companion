@@ -12,6 +12,7 @@ use AgentSoftware\LaravelAiCompanion\Evaluation\Scorers\Scorer;
 use AgentSoftware\LaravelAiCompanion\Models\AiEvaluation;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use Closure;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Throwable;
 
@@ -31,6 +32,10 @@ class EvaluationRunner
             $response = $judge->prompt($this->buildLogPrompt($log), model: $model);
 
             if (! $response instanceof StructuredAgentResponse) {
+                Log::warning('LlmJudge returned a non-structured response', [
+                    'agent' => $log->agent,
+                    'log_id' => $log->id,
+                ]);
                 return null;
             }
 
@@ -103,7 +108,7 @@ class EvaluationRunner
 
         $response = $log->response;
         $responseText = is_array($response)
-            ? json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            ? (json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) ?: json_encode($response) ?: '{}')
             : (string) $response;
 
         $parts[] = "--- AGENT RESPONSE ---\n{$responseText}";
