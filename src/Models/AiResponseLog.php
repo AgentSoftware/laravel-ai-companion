@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property string $id
@@ -52,5 +53,11 @@ class AiResponseLog extends Model
         $months = (int) config('ai-companion.response_logs.prune_after_months', 6);
 
         return static::query()->where('created_at', '<=', now()->subMonths($months));
+    }
+
+    /** @return HasMany<AiEvaluation, $this> */
+    public function evaluations(): HasMany
+    {
+        return $this->hasMany(AiEvaluation::class, 'ai_response_log_id');
     }
 }
