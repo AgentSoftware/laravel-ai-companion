@@ -91,7 +91,7 @@ it('stores null instructions when agent returns empty string', function (): void
         meta: new Meta,
     ));
 
-    // Empty string instructions are stored as empty string, not null — both are acceptable.
-    // This test just confirms the column writes without error.
-    expect(AiResponseLog::first()->instructions)->toBeString();
+    // Empty string instructions are converted to null via ?: null,
+    // ensuring null consistently means "instructions not captured".
+    expect(AiResponseLog::first()->instructions)->toBeNull();
 });

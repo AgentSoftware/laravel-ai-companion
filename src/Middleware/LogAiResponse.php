@@ -21,6 +21,7 @@ class LogAiResponse
 
         $log = AiResponseLog::create([
             'agent' => $agent::class,
+            'instructions' => (string) $agent->instructions() ?: null,
             'prompt' => $prompt->prompt,
             'properties' => $agent instanceof HasLoggableProperties
                 ? $agent->loggableProperties()

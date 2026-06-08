@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $id
  * @property string|null $invocation_id
  * @property string $agent
+ * @property string|null $instructions
  * @property string $prompt
  * @property array<string, mixed>|null $response
  * @property array<string, mixed>|null $properties
@@ -29,6 +30,7 @@ class AiResponseLog extends Model
     protected $fillable = [
         'invocation_id',
         'agent',
+        'instructions',
         'prompt',
         'response',
         'properties',
