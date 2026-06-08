@@ -15,7 +15,7 @@ readonly class EvaluationResult
     ) {}
 
     /**
-     * @param array{overall_score: int|string, criteria: list<array{name: string, score: int|string, feedback: string}>, summary: string} $data
+     * @param  array{overall_score: int|string, criteria: list<array{name: string, score: int|string, feedback: string}>, summary: string}  $data
      */
     public static function fromArray(array $data, string $judgeModel): self
     {

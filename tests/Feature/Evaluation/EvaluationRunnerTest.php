@@ -15,11 +15,11 @@ use Laravel\Ai\Responses\StructuredAgentResponse;
 function makeResponseLog(array $overrides = []): AiResponseLog
 {
     return AiResponseLog::create(array_merge([
-        'agent'        => 'App\\Ai\\Agents\\ContentWriterAgent',
+        'agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
         'instructions' => 'You are a content writer for estate agents.',
-        'prompt'       => 'Write a homepage hero section for Acme Estates.',
-        'response'     => ['text' => 'Welcome to Acme Estates — your trusted local partner.'],
-        'status'       => AiResponseStatus::Success,
+        'prompt' => 'Write a homepage hero section for Acme Estates.',
+        'response' => ['text' => 'Welcome to Acme Estates — your trusted local partner.'],
+        'status' => AiResponseStatus::Success,
     ], $overrides));
 }
 
@@ -29,7 +29,7 @@ function makeJudgeResponse(): StructuredAgentResponse
         invocationId: 'judge-inv-1',
         structured: [
             'overall_score' => 82,
-            'criteria'      => [
+            'criteria' => [
                 ['name' => 'accuracy',     'score' => 85, 'feedback' => 'Reflects company info correctly.'],
                 ['name' => 'completeness', 'score' => 70, 'feedback' => 'Missing a CTA.'],
                 ['name' => 'tone',         'score' => 90, 'feedback' => 'Professional and engaging.'],
@@ -75,9 +75,15 @@ it('stores an evaluation result for a successful log', function (): void {
 });
 
 it('uses an explicit scorer when one is registered for the agent', function (): void {
-    $explicitScorer = new class extends Scorer {
-        public function agent(): string { return 'App\\Ai\\Agents\\ContentWriterAgent'; }
-        public function criteria(): array {
+    $explicitScorer = new class extends Scorer
+    {
+        public function agent(): string
+        {
+            return 'App\\Ai\\Agents\\ContentWriterAgent';
+        }
+
+        public function criteria(): array
+        {
             return ['no_placeholders' => 'No placeholder text in output.'];
         }
     };
@@ -92,6 +98,7 @@ it('uses an explicit scorer when one is registered for the agent', function (): 
 
     $runner = makeRunner(function (string $criteria) use ($fakeJudge, &$capturedCriteria): LlmJudge {
         $capturedCriteria = $criteria;
+
         return $fakeJudge;
     });
 
@@ -126,6 +133,7 @@ it('includes agent instructions in the prompt when they are stored', function ()
         ->once()
         ->withArgs(function (string $prompt) use (&$capturedPrompt): bool {
             $capturedPrompt = $prompt;
+
             return true;
         })
         ->andReturn(makeJudgeResponse());
@@ -145,6 +153,7 @@ it('omits the agent instructions section when instructions are null', function (
         ->once()
         ->withArgs(function (string $prompt) use (&$capturedPrompt): bool {
             $capturedPrompt = $prompt;
+
             return true;
         })
         ->andReturn(makeJudgeResponse());

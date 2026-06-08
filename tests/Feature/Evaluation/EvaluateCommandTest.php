@@ -15,11 +15,11 @@ use Laravel\Ai\Responses\StructuredAgentResponse;
 function seedCommandLog(array $overrides = []): AiResponseLog
 {
     return AiResponseLog::create(array_merge([
-        'agent'        => 'App\\Ai\\Agents\\ContentWriterAgent',
+        'agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
         'instructions' => 'Write content.',
-        'prompt'       => 'Write a hero.',
-        'response'     => ['text' => 'Welcome to Acme.'],
-        'status'       => AiResponseStatus::Success,
+        'prompt' => 'Write a hero.',
+        'response' => ['text' => 'Welcome to Acme.'],
+        'status' => AiResponseStatus::Success,
     ], $overrides));
 }
 
@@ -29,7 +29,7 @@ function makeCommandJudgeResponse(int $score = 78): StructuredAgentResponse
         invocationId: 'j1',
         structured: [
             'overall_score' => $score,
-            'criteria'      => [
+            'criteria' => [
                 ['name' => 'accuracy', 'score' => 80, 'feedback' => 'Mostly accurate.'],
                 ['name' => 'tone',     'score' => 75, 'feedback' => 'Professional but bland.'],
             ],
@@ -62,11 +62,11 @@ it('skips already-evaluated logs unless --re-run is passed', function (): void {
     $log = seedCommandLog();
     AiEvaluation::create([
         'ai_response_log_id' => $log->id,
-        'agent'              => $log->agent,
-        'overall_score'      => 90,
-        'criteria'           => [],
-        'summary'            => 'Already evaluated.',
-        'judge_model'        => 'claude-haiku-4-5-20251001',
+        'agent' => $log->agent,
+        'overall_score' => 90,
+        'criteria' => [],
+        'summary' => 'Already evaluated.',
+        'judge_model' => 'claude-haiku-4-5-20251001',
     ]);
 
     $fakeJudge = Mockery::mock(LlmJudge::class);
@@ -85,11 +85,11 @@ it('re-evaluates already-evaluated logs when --re-run is passed', function (): v
     $log = seedCommandLog();
     AiEvaluation::create([
         'ai_response_log_id' => $log->id,
-        'agent'              => $log->agent,
-        'overall_score'      => 90,
-        'criteria'           => [],
-        'summary'            => 'Old evaluation.',
-        'judge_model'        => 'claude-haiku-4-5-20251001',
+        'agent' => $log->agent,
+        'overall_score' => 90,
+        'criteria' => [],
+        'summary' => 'Old evaluation.',
+        'judge_model' => 'claude-haiku-4-5-20251001',
     ]);
 
     $fakeJudge = Mockery::mock(LlmJudge::class);
@@ -98,7 +98,7 @@ it('re-evaluates already-evaluated logs when --re-run is passed', function (): v
     $this->app->instance(EvaluationRunner::class, $runner);
 
     $this->artisan(EvaluateCommand::class, [
-        '--agent'  => 'App\\Ai\\Agents\\ContentWriterAgent',
+        '--agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
         '--re-run' => true,
     ])->assertSuccessful();
 

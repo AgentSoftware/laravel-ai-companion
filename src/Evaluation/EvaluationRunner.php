@@ -36,6 +36,7 @@ class EvaluationRunner
                     'agent' => $log->agent,
                     'log_id' => $log->id,
                 ]);
+
                 return null;
             }
 
@@ -45,14 +46,14 @@ class EvaluationRunner
 
             AiEvaluation::create([
                 'ai_response_log_id' => $log->id,
-                'agent'              => $log->agent,
-                'scorer'             => $scorer instanceof AutoInferredScorer ? null : $scorer::class,
-                'overall_score'      => $result->overallScore,
-                'criteria'           => array_map(
+                'agent' => $log->agent,
+                'scorer' => $scorer instanceof AutoInferredScorer ? null : $scorer::class,
+                'overall_score' => $result->overallScore,
+                'criteria' => array_map(
                     static fn (CriterionResult $c): array => $c->toArray(),
                     $result->criteria,
                 ),
-                'summary'    => $result->summary,
+                'summary' => $result->summary,
                 'judge_model' => $result->judgeModel,
             ]);
 
@@ -84,7 +85,7 @@ class EvaluationRunner
 
         if ($criteria === []) {
             return 'Infer 3–5 appropriate evaluation criteria from the agent instructions provided. '
-                . 'Choose criteria that best assess whether the agent achieved its stated purpose.';
+                .'Choose criteria that best assess whether the agent achieved its stated purpose.';
         }
 
         $lines = array_map(
@@ -93,7 +94,7 @@ class EvaluationRunner
             $criteria,
         );
 
-        return "Evaluate against these specific criteria:\n" . implode("\n", $lines);
+        return "Evaluate against these specific criteria:\n".implode("\n", $lines);
     }
 
     private function buildLogPrompt(AiResponseLog $log): string

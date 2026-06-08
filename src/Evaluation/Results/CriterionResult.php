@@ -26,8 +26,8 @@ readonly class CriterionResult
     public function toArray(): array
     {
         return [
-            'name'     => $this->name,
-            'score'    => $this->score,
+            'name' => $this->name,
+            'score' => $this->score,
             'feedback' => $this->feedback,
         ];
     }

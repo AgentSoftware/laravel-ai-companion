@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Middleware\LogAiResponse;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
+use Illuminate\Broadcasting\Channel;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
@@ -20,7 +21,10 @@ function makeInstructionsAgent(string $instructions = 'You are a helpful agent.'
     {
         public function __construct(private readonly string $agentInstructions) {}
 
-        public function instructions(): string { return $this->agentInstructions; }
+        public function instructions(): string
+        {
+            return $this->agentInstructions;
+        }
 
         public function prompt(string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): AgentResponse
         {
@@ -37,17 +41,17 @@ function makeInstructionsAgent(string $instructions = 'You are a helpful agent.'
             throw new RuntimeException('Not implemented');
         }
 
-        public function broadcast(string $prompt, \Illuminate\Broadcasting\Channel|array $channels, array $attachments = [], bool $now = false, Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
+        public function broadcast(string $prompt, Channel|array $channels, array $attachments = [], bool $now = false, Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function broadcastNow(string $prompt, \Illuminate\Broadcasting\Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
+        public function broadcastNow(string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
 
-        public function broadcastOnQueue(string $prompt, \Illuminate\Broadcasting\Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
+        public function broadcastOnQueue(string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
         {
             throw new RuntimeException('Not implemented');
         }
@@ -60,7 +64,7 @@ function makeInstructionsPrompt(string $instructions = 'You are a helpful agent.
         agent: makeInstructionsAgent($instructions),
         prompt: 'Hello',
         attachments: [],
-        provider: Mockery::mock(\Laravel\Ai\Contracts\Providers\TextProvider::class),
+        provider: Mockery::mock(TextProvider::class),
         model: 'claude-haiku-4-5-20251001',
     );
 }
