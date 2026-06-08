@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion;
 
+use AgentSoftware\LaravelAiCompanion\Console\EvaluateCommand;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use Illuminate\Console\Scheduling\Schedule;
@@ -19,7 +20,10 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
-            ->discoversMigrations();
+            ->discoversMigrations()
+            ->hasCommands([
+                EvaluateCommand::class,
+            ]);
     }
 
     public function packageBooted(): void
