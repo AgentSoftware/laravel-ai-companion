@@ -13,8 +13,10 @@ return [
         'enabled' => env('AI_EVALUATION_ENABLED', true),
 
         /*
-         | The model used by the LLM judge. A cheaper/faster model (Haiku-class)
-         | is recommended since it runs once per log evaluated.
+         | The Anthropic model used by the LLM judge. Must be an Anthropic model
+         | identifier — the judge is hardcoded to the Anthropic provider.
+         | A cheaper/faster model (Haiku-class) is recommended since it runs once
+         | per log evaluated.
          */
         'model' => env('AI_EVALUATION_MODEL', 'claude-haiku-4-5-20251001'),
 

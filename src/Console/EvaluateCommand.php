@@ -27,6 +27,12 @@ class EvaluateCommand extends Command
 
     public function handle(EvaluationRunner $runner): int
     {
+        if (! config('ai-companion.evaluation.enabled', true)) {
+            $this->components->warn('AI evaluation is disabled (AI_EVALUATION_ENABLED=false).');
+
+            return self::SUCCESS;
+        }
+
         $agents = $this->resolveAgents();
 
         if ($agents === []) {
@@ -106,6 +112,7 @@ class EvaluateCommand extends Command
             if ($result === null) {
                 $this->line(" <fg=red>✗</>  log {$this->shortId($log->id)}  FAILED — judge error, skipped");
                 $skipped++;
+
                 continue;
             }
 
@@ -136,7 +143,7 @@ class EvaluateCommand extends Command
         $avg = (int) round((float) $evaluations->avg('overall_score'));
 
         $this->components->info('Summary');
-        $this->line("  {$agent}   avg: {$avg}/100   {$evaluated} evaluated" . ($skipped > 0 ? ", {$skipped} skipped" : ''));
+        $this->line("  {$agent}   avg: {$avg}/100   {$evaluated} evaluated".($skipped > 0 ? ", {$skipped} skipped" : ''));
 
         $allCriteria = $evaluations
             ->flatMap(fn ($e) => $e->criteria)

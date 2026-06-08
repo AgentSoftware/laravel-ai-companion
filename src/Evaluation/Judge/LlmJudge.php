@@ -10,6 +10,13 @@ use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Promptable;
 
+/**
+ * LLM judge for evaluating agent responses.
+ *
+ * This judge is hardcoded to the Anthropic provider via the Provider attribute.
+ * The configured model (ai-companion.evaluation.model) must be an Anthropic model
+ * identifier (e.g. claude-haiku-4-5-20251001, claude-sonnet-4-6).
+ */
 #[Provider('anthropic')]
 class LlmJudge implements Agent, HasStructuredOutput
 {
@@ -42,8 +49,8 @@ class LlmJudge implements Agent, HasStructuredOutput
             'criteria' => $schema->array()
                 ->items(
                     $schema->object([
-                        'name'     => $schema->string()->required(),
-                        'score'    => $schema->integer()->required(),
+                        'name' => $schema->string()->required(),
+                        'score' => $schema->integer()->required(),
                         'feedback' => $schema->string()->required(),
                     ])
                 )
