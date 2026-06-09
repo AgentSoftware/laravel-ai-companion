@@ -79,10 +79,11 @@ class DashboardController extends Controller
             ->orderBy('date')
             ->get();
 
-        // Weakest criterion across all evaluations
+        // Weakest criterion — only criteria that appear in 2+ evaluations are meaningful aggregates
         $criteriaScores = AiEvaluation::all()
             ->flatMap(fn ($e) => collect($e->criteria)->map(fn ($c) => ['name' => $c['name'], 'score' => $c['score']]))
             ->groupBy('name')
+            ->filter(fn ($g) => $g->count() >= 2)
             ->map(fn ($g) => (int) round($g->avg('score')))
             ->sortBy(fn ($v) => $v);
 

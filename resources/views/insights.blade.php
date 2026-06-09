@@ -87,16 +87,17 @@
         <div class="stat__footer">{{ verdictLabel($avgScoreInt) }}</div>
     </div>
 
-    <div class="stat sc-orange">
+    @php $hasWeakest = $weakestCriterion !== null; @endphp
+    <div class="stat {{ $hasWeakest ? 'sc-orange' : '' }}">
         <div class="stat__header">
             <span class="stat__label">Weakest criterion</span>
-            <span class="stat__icon" style="background:var(--color-orange-50); color:var(--color-orange-600)"><i class="ph ph-warning"></i></span>
+            <span class="stat__icon" @if($hasWeakest) style="background:var(--color-orange-50); color:var(--color-orange-600)" @endif><i class="ph ph-warning"></i></span>
         </div>
-        <div class="stat__value" style="font-size:18px; color:var(--color-orange-600); font-weight:700; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px">
+        <div class="stat__value" style="font-size:{{ $hasWeakest ? '18px' : '28px' }}; @if($hasWeakest) color:var(--color-orange-600); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px @endif; margin-top:4px">
             {{ $weakestCriterion ?? '—' }}
         </div>
-        <div class="stat__footer" style="color:var(--color-orange-600)">
-            averaging {{ $weakestScore ?? 0 }}/100
+        <div class="stat__footer" @if($hasWeakest) style="color:var(--color-orange-600)" @endif>
+            {{ $hasWeakest ? 'averaging ' . $weakestScore . '/100' : 'needs 2+ shared evaluations' }}
         </div>
     </div>
 
@@ -281,15 +282,15 @@
     </div>
 </div>
 
-{{-- Criteria breakdown --}}
-@if($criteriaScores->isNotEmpty())
-    <div class="card fade-in">
-        <div class="card__header">
-            <div>
-                <div class="card__title">Criteria Breakdown</div>
-                <div class="card__sub">Average score per criterion, weakest first</div>
-            </div>
+{{-- Criteria breakdown — only shown when criteria appear across 2+ evaluations --}}
+<div class="card fade-in">
+    <div class="card__header">
+        <div>
+            <div class="card__title">Criteria Breakdown</div>
+            <div class="card__sub">Average score per criterion across evaluations, weakest first</div>
         </div>
+    </div>
+    @if($criteriaScores->isNotEmpty())
         <div class="card__body">
             <div class="critchart">
                 @foreach($criteriaScores as $critName => $critScore)
@@ -304,7 +305,13 @@
                 @endforeach
             </div>
         </div>
-    </div>
-@endif
+    @else
+        <div style="padding:40px 20px; text-align:center; color:var(--color-fg-secondary)">
+            <i class="ph ph-list-checks" style="font-size:28px; display:block; margin-bottom:8px; opacity:.35"></i>
+            <div style="font-weight:600; margin-bottom:4px">Not enough data yet</div>
+            <div style="font-size:13px">Criteria averages appear here once the same criterion has been evaluated across multiple agents.</div>
+        </div>
+    @endif
+</div>
 
 @endsection
