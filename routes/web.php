@@ -7,4 +7,5 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [DashboardController::class, 'index'])->name('index');
 Route::get('/evaluations/{evaluation}', [DashboardController::class, 'show'])->name('evaluation');
+Route::post('/logs/{log}/evaluate', [DashboardController::class, 'evaluateLog'])->name('log.evaluate');
 Route::get('/{agent}', [DashboardController::class, 'agent'])->name('agent');
