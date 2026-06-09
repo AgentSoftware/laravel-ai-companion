@@ -6,6 +6,7 @@ use AgentSoftware\LaravelAiCompanion\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [DashboardController::class, 'index'])->name('index');
+Route::get('/insights', [DashboardController::class, 'insights'])->name('insights');
 Route::get('/evaluations/{evaluation}', [DashboardController::class, 'show'])->name('evaluation');
 Route::post('/logs/{log}/evaluate', [DashboardController::class, 'evaluateLog'])->name('log.evaluate');
 Route::get('/{agent}', [DashboardController::class, 'agent'])->name('agent');

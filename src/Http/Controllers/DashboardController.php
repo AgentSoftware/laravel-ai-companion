@@ -54,6 +54,47 @@ class DashboardController extends Controller
         return view('ai-companion::evaluation', compact('evaluation'));
     }
 
+    public function insights(): View
+    {
+        $agents = AiEvaluation::query()
+            ->selectRaw('agent, COUNT(*) as total_evals, AVG(overall_score) as avg_score')
+            ->groupBy('agent')
+            ->orderByDesc('avg_score')
+            ->get();
+
+        $logCounts = AiResponseLog::query()
+            ->selectRaw('agent, COUNT(*) as total')
+            ->groupBy('agent')
+            ->pluck('total', 'agent');
+
+        $totalEvals = $agents->sum('total_evals');
+        $totalLogs  = $logCounts->sum();
+        $avgAll     = $agents->where('avg_score', '>', 0)->avg('avg_score');
+
+        // Trend: avg score per day for last 8 days
+        $trend = AiEvaluation::query()
+            ->selectRaw('DATE(created_at) as date, ROUND(AVG(overall_score)) as avg_score')
+            ->where('created_at', '>=', now()->subDays(8))
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
+        // Weakest criterion across all evaluations
+        $criteriaScores = AiEvaluation::all()
+            ->flatMap(fn ($e) => collect($e->criteria)->map(fn ($c) => ['name' => $c['name'], 'score' => $c['score']]))
+            ->groupBy('name')
+            ->map(fn ($g) => (int) round($g->avg('score')))
+            ->sortBy(fn ($v) => $v);
+
+        $weakestCriterion = $criteriaScores->keys()->first();
+        $weakestScore     = $criteriaScores->first();
+
+        return view('ai-companion::insights', compact(
+            'agents', 'logCounts', 'totalEvals', 'totalLogs', 'avgAll',
+            'trend', 'weakestCriterion', 'weakestScore', 'criteriaScores'
+        ));
+    }
+
     public function evaluateLog(AiResponseLog $log, EvaluationRunner $runner): JsonResponse
     {
         $result = $runner->run($log);

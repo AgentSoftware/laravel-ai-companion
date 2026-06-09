@@ -1,109 +1,141 @@
 @extends('ai-companion::layout')
 
 @section('content')
-    @php
-        $agentParts = explode('\\', $evaluation->agent);
-        $shortAgentName = end($agentParts);
-        $score = $evaluation->overall_score;
-        $scoreColorText = $score >= 80 ? 'text-green-600' : ($score >= 60 ? 'text-yellow-600' : 'text-red-600');
-        $scoreColorBadge = $score >= 80 ? 'bg-green-100 text-green-800' : ($score >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800');
-    @endphp
+@php
+    function scoreband(int|null $score): string {
+        if ($score === null) return 'none';
+        if ($score >= 85) return 'green';
+        if ($score >= 70) return 'amber';
+        if ($score >= 55) return 'orange';
+        return 'red';
+    }
 
-    <div class="mb-6">
-        <a href="{{ route('ai-companion.agent', base64_encode($evaluation->agent)) }}"
-           class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4">
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to {{ $shortAgentName }}
-        </a>
+    function verdictLabel(int|null $score): string {
+        if ($score === null) return '—';
+        if ($score >= 85) return 'Strong';
+        if ($score >= 70) return 'Acceptable';
+        if ($score >= 55) return 'Needs work';
+        return 'Failing';
+    }
 
-        <div class="flex items-start justify-between">
-            <div>
-                <h2 class="text-2xl font-bold text-gray-900">Evaluation Detail</h2>
-                <p class="text-sm text-gray-500 mt-1">{{ $evaluation->created_at->format('M j, Y H:i:s') }}</p>
-            </div>
-            <div class="text-right">
-                <div class="text-5xl font-bold {{ $scoreColorText }}">{{ $score }}</div>
-                <div class="text-sm text-gray-500 mt-1">out of 100</div>
-            </div>
+    $agentParts    = explode('\\', $evaluation->agent);
+    $shortAgentName = end($agentParts);
+    $score         = $evaluation->overall_score;
+    $scoreBand     = scoreband($score);
+    $verdict       = verdictLabel($score);
+
+    // Sort criteria weakest first
+    $sortedCriteria = collect($evaluation->criteria)->sortBy('score')->values();
+    $criteriaCount  = $sortedCriteria->count();
+
+    // Donut ring
+    $size   = 108;
+    $stroke = 11;
+    $r      = ($size - $stroke) / 2;
+    $c      = 2 * M_PI * $r;
+    $pct    = max(0, min(100, $score)) / 100;
+    $off    = $c * (1 - $pct);
+@endphp
+
+<div class="page-head fade-in">
+    <a href="{{ route('ai-companion.agent', base64_encode($evaluation->agent)) }}"
+       class="page-head__back">
+        <i class="ph ph-arrow-left"></i> Back to {{ $shortAgentName }}
+    </a>
+</div>
+
+{{-- Eval hero --}}
+<div class="eval-hero sc-{{ $scoreBand }} fade-in">
+    <div class="eval-hero__left">
+        <div class="eval-hero__verdict">
+            <div class="eval-hero__verdict-dot"></div>
+            {{ $verdict }}
         </div>
-    </div>
-
-    <!-- Summary -->
-    <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Summary</h3>
-        <p class="text-gray-700 leading-relaxed">{{ $evaluation->summary }}</p>
-
-        <div class="mt-4 flex items-center gap-3">
-            <span class="text-xs text-gray-500">Judge model:</span>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+        <h2 class="eval-hero__title">Evaluation detail</h2>
+        <div class="eval-hero__meta">
+            <span>{{ $evaluation->created_at->format('M j, Y H:i:s') }}</span>
+            <span style="color:var(--color-default-200)">·</span>
+            <span class="judge-pill">
+                <i class="ph ph-cpu" style="font-size:11px"></i>
                 {{ $evaluation->judge_model }}
             </span>
             @if($evaluation->scorer)
-                <span class="text-xs text-gray-500">Scorer:</span>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 font-mono">
+                <span style="color:var(--color-default-200)">·</span>
+                <span class="judge-pill" style="background:var(--color-default-100); color:var(--color-default-600)">
                     {{ $evaluation->scorer }}
                 </span>
             @endif
         </div>
     </div>
 
-    <!-- Criteria -->
-    <div class="bg-white rounded-lg shadow overflow-hidden mb-6">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Criteria Scores</h3>
+    {{-- SVG Donut ring --}}
+    <div class="ring sc-{{ $scoreBand }}" style="width:{{ $size }}px; height:{{ $size }}px">
+        <svg width="{{ $size }}" height="{{ $size }}" style="transform:rotate(-90deg)">
+            <circle class="ring__track"
+                    cx="{{ $size/2 }}" cy="{{ $size/2 }}" r="{{ $r }}"
+                    fill="none" stroke-width="{{ $stroke }}"/>
+            <circle class="ring__fill"
+                    cx="{{ $size/2 }}" cy="{{ $size/2 }}" r="{{ $r }}"
+                    fill="none" stroke-width="{{ $stroke }}"
+                    stroke-dasharray="{{ $c }}"
+                    stroke-dashoffset="{{ $off }}"/>
+        </svg>
+        <div class="ring__label">
+            <span class="ring__num" style="font-size:30px">{{ $score }}</span>
+            <span class="ring__out">/ 100</span>
         </div>
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criterion</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Score</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feedback</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                @foreach($evaluation->criteria as $criterion)
-                    @php
-                        $cScore = $criterion['score'];
-                        $barColor = $cScore >= 80 ? 'bg-green-500' : ($cScore >= 60 ? 'bg-yellow-500' : 'bg-red-500');
-                        $badgeColor = $cScore >= 80 ? 'text-green-700' : ($cScore >= 60 ? 'text-yellow-700' : 'text-red-700');
-                    @endphp
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {{ $criterion['name'] }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="flex items-center gap-3">
-                                <div class="flex-1 bg-gray-200 rounded-full h-2 w-32">
-                                    <div class="{{ $barColor }} h-2 rounded-full" style="width: {{ $cScore }}%"></div>
-                                </div>
-                                <span class="text-sm font-semibold {{ $badgeColor }} w-12 text-right">{{ $cScore }}/100</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 text-sm text-gray-600">
-                            {{ $criterion['feedback'] }}
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
+    </div>
+</div>
+
+{{-- Summary card --}}
+<div class="card fade-in" style="margin-bottom:14px">
+    <div class="card__header">
+        <div class="card__title">Summary</div>
+    </div>
+    <div class="card__body">
+        <p class="summary-text">{{ $evaluation->summary }}</p>
+    </div>
+</div>
+
+{{-- Criteria scores card --}}
+<div class="card fade-in" style="margin-bottom:14px">
+    <div class="card__header">
+        <div>
+            <div class="card__title">Criteria Scores</div>
+            <div class="card__sub">{{ $criteriaCount }} {{ Str::plural('criterion', $criteriaCount) }} &mdash; sorted weakest first</div>
+        </div>
     </div>
 
-    <!-- Prompt collapsible -->
-    @if($evaluation->log)
-        <div class="bg-white rounded-lg shadow overflow-hidden">
-            <details>
-                <summary class="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
-                    <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Prompt</h3>
-                    <svg class="h-5 w-5 text-gray-400 details-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </summary>
-                <div class="px-6 py-4 border-t border-gray-200">
-                    <pre class="text-xs text-gray-700 bg-gray-50 rounded p-4 overflow-x-auto whitespace-pre-wrap font-mono">{{ is_array($evaluation->log->prompt) ? json_encode($evaluation->log->prompt, JSON_PRETTY_PRINT) : $evaluation->log->prompt }}</pre>
+    @foreach($sortedCriteria as $criterion)
+        @php
+            $cs      = $criterion['score'];
+            $cBand   = scoreband($cs);
+        @endphp
+        <div class="criterion sc-{{ $cBand }}">
+            <div class="criterion__name">{{ $criterion['name'] }}</div>
+            <div class="score-bar" style="max-width:150px">
+                <div class="score-bar__track">
+                    <div class="score-bar__fill" style="width:{{ $cs }}%"></div>
                 </div>
-            </details>
+                <span class="score-bar__num">{{ $cs }}</span>
+            </div>
+            <div class="criterion__fb">{{ $criterion['feedback'] }}</div>
         </div>
-    @endif
+    @endforeach
+</div>
+
+{{-- Prompt card (collapsible) --}}
+@if($evaluation->log)
+    <div class="card fade-in" x-data="{ open: false }">
+        <div class="prompt-toggle" @click="open = !open">
+            <div class="card__title">Prompt</div>
+            <i class="ph ph-caret-down" :style="open ? 'transform:rotate(180deg)' : ''"></i>
+        </div>
+        <div class="prompt-body" x-show="open" x-transition>
+            <pre>{{ is_array($evaluation->log->prompt)
+                ? json_encode($evaluation->log->prompt, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+                : $evaluation->log->prompt }}</pre>
+        </div>
+    </div>
+@endif
 @endsection

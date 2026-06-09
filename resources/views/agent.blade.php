@@ -1,138 +1,180 @@
 @extends('ai-companion::layout')
 
 @section('content')
-    @php
-        $parts = explode('\\', $agentName);
-        $shortName = end($parts);
-        $avgScore = $stats && $stats->total > 0 ? (int) round($stats->avg_score) : null;
-        $scoreColor = $avgScore === null ? '' : ($avgScore >= 80 ? 'text-green-600' : ($avgScore >= 60 ? 'text-yellow-600' : 'text-red-600'));
-    @endphp
+@php
+    function scoreband(int|null $score): string {
+        if ($score === null) return 'none';
+        if ($score >= 85) return 'green';
+        if ($score >= 70) return 'amber';
+        if ($score >= 55) return 'orange';
+        return 'red';
+    }
 
-    {{-- Header --}}
-    <div class="mb-8">
-        <a href="{{ route('ai-companion.index') }}"
-           class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-3">
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            All Agents
-        </a>
-        <h2 class="text-2xl font-bold text-gray-900">{{ $shortName }}</h2>
-        <p class="text-sm text-gray-400 font-mono mt-0.5">{{ $agentName }}</p>
+    $parts     = explode('\\', $agentName);
+    $shortName = end($parts);
+    $avgScore  = $stats && $stats->total > 0 ? (int) round($stats->avg_score) : null;
+    $bestScore = $stats && $stats->total > 0 ? (int) $stats->max_score : null;
+    $worstScore= $stats && $stats->total > 0 ? (int) $stats->min_score : null;
+    $avgBand   = scoreband($avgScore);
+@endphp
+
+<div class="page-head fade-in">
+    <a href="{{ route('ai-companion.index') }}" class="page-head__back">
+        <i class="ph ph-arrow-left"></i> All Agents
+    </a>
+    <h1 class="page-head__title">{{ $shortName }}</h1>
+    <p class="page-head__sub" style="font-family:monospace">{{ $agentName }}</p>
+</div>
+
+{{-- Stat band --}}
+<div class="statband fade-in">
+    <div class="stat">
+        <div class="stat__header">
+            <span class="stat__label">Response Logs</span>
+            <span class="stat__icon"><i class="ph ph-stack"></i></span>
+        </div>
+        <div class="stat__value">{{ number_format($logs->total()) }}</div>
+        <div class="stat__footer">total logged interactions</div>
     </div>
 
-    {{-- Stats row --}}
-    @if($stats && $stats->total > 0)
-        <div class="grid grid-cols-4 gap-4 mb-8">
-            <div class="bg-white rounded-lg shadow p-5">
-                <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Evaluations</p>
-                <p class="text-3xl font-bold text-gray-900 mt-1">{{ number_format($stats->total) }}</p>
-            </div>
-            <div class="bg-white rounded-lg shadow p-5">
-                <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Score</p>
-                <p class="text-3xl font-bold {{ $scoreColor }} mt-1">{{ $avgScore }}<span class="text-lg text-gray-400">/100</span></p>
-            </div>
-            <div class="bg-white rounded-lg shadow p-5">
-                <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Best</p>
-                <p class="text-3xl font-bold text-green-600 mt-1">{{ $stats->max_score }}<span class="text-lg text-gray-400">/100</span></p>
-            </div>
-            <div class="bg-white rounded-lg shadow p-5">
-                <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Worst</p>
-                <p class="text-3xl font-bold text-red-500 mt-1">{{ $stats->min_score }}<span class="text-lg text-gray-400">/100</span></p>
-            </div>
+    <div class="stat sc-{{ $avgBand }}">
+        <div class="stat__header">
+            <span class="stat__label">Avg Score</span>
+            <span class="stat__icon"><i class="ph ph-gauge"></i></span>
         </div>
-    @endif
-
-    {{-- Response logs --}}
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <div>
-                <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Response Logs</h3>
-                <p class="text-xs text-gray-400 mt-0.5">{{ $logs->total() }} total &mdash; click Evaluate to score any entry</p>
-            </div>
+        <div class="stat__value" style="color: var(--sc, var(--color-default-900))">
+            {{ $avgScore !== null ? $avgScore : '—' }}
         </div>
+        <div class="stat__footer">across {{ number_format($stats?->total ?? 0) }} evaluations</div>
+    </div>
 
-        @if($logs->isEmpty())
-            <div class="p-12 text-center text-gray-400">No logs found for this agent.</div>
-        @else
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Log</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prompt preview</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-44">Score</th>
+    <div class="stat sc-{{ scoreband($bestScore) }}">
+        <div class="stat__header">
+            <span class="stat__label">Best</span>
+            <span class="stat__icon"><i class="ph ph-trophy"></i></span>
+        </div>
+        <div class="stat__value" style="color: var(--sc, var(--color-default-900))">
+            {{ $bestScore !== null ? $bestScore : '—' }}
+        </div>
+        <div class="stat__footer">highest evaluation score</div>
+    </div>
+
+    <div class="stat sc-{{ scoreband($worstScore) }}">
+        <div class="stat__header">
+            <span class="stat__label">Worst</span>
+            <span class="stat__icon"><i class="ph ph-warning"></i></span>
+        </div>
+        <div class="stat__value" style="color: var(--sc, var(--color-default-900))">
+            {{ $worstScore !== null ? $worstScore : '—' }}
+        </div>
+        <div class="stat__footer">lowest evaluation score</div>
+    </div>
+</div>
+
+{{-- Response logs card --}}
+<div class="card fade-in">
+    <div class="card__header">
+        <div>
+            <div class="card__title">Response Logs</div>
+            <div class="card__sub">{{ number_format($logs->total()) }} total &mdash; click Evaluate to score any entry</div>
+        </div>
+    </div>
+
+    @if($logs->isEmpty())
+        <div style="padding: 40px 20px; text-align:center; color:var(--color-fg-secondary)">
+            No logs found for this agent.
+        </div>
+    @else
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Log</th>
+                    <th>Prompt preview</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($logs as $log)
+                    @php
+                        $evaluation   = $log->evaluations->last();
+                        $promptRaw    = is_array($log->prompt)
+                            ? collect($log->prompt)->map(fn($v) => is_string($v) ? $v : json_encode($v))->implode(' ')
+                            : (string) $log->prompt;
+                        $promptPreview = strip_tags($promptRaw);
+                        $s = $evaluation?->overall_score;
+                        $band = $s !== null ? (
+                            $s >= 85 ? 'green' : ($s >= 70 ? 'amber' : ($s >= 55 ? 'orange' : 'red'))
+                        ) : 'none';
+                    @endphp
+                    <tr style="cursor:default">
+                        <td>
+                            <span class="logid">{{ substr($log->id, 0, 8) }}</span>
+                        </td>
+                        <td>
+                            <div class="prompt-preview" title="{{ e($promptPreview) }}">{{ $promptPreview }}</div>
+                        </td>
+                        <td>
+                            @if($evaluation)
+                                <span class="chip evaluated"><span class="chip-dot"></span>Evaluated</span>
+                            @else
+                                <span class="chip pending"><span class="chip-dot"></span>Pending</span>
+                            @endif
+                        </td>
+                        <td style="font-size:13px; color:var(--color-fg-secondary); white-space:nowrap">
+                            {{ $log->created_at->format('M j, Y H:i') }}
+                        </td>
+                        <td>
+                            @if($evaluation)
+                                <a href="{{ route('ai-companion.evaluation', $evaluation->id) }}"
+                                   class="score-badge sc-{{ $band }}"
+                                   onclick="event.stopPropagation()"
+                                   style="text-decoration:none">
+                                    {{ $s }}
+                                    <i class="ph ph-arrow-right" style="font-size:11px"></i>
+                                </a>
+                            @else
+                                <div x-data="{ loading: false, error: null }">
+                                    <button
+                                        x-on:click="
+                                            loading = true; error = null;
+                                            fetch('{{ route('ai-companion.log.evaluate', $log->id) }}', {
+                                                method: 'POST',
+                                                headers: {
+                                                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                                                    'Accept': 'application/json',
+                                                }
+                                            })
+                                            .then(r => r.json())
+                                            .then(data => {
+                                                if (data.redirect) window.location.href = data.redirect;
+                                                else { error = data.error ?? 'Unknown error'; loading = false; }
+                                            })
+                                            .catch(() => { error = 'Request failed'; loading = false; })
+                                        "
+                                        :disabled="loading"
+                                        class="btn primary sm"
+                                    >
+                                        <span x-show="loading" class="spin"></span>
+                                        <i x-show="!loading" class="ph ph-play"></i>
+                                        <span x-text="loading ? 'Evaluating…' : 'Evaluate'"></span>
+                                    </button>
+                                    <p x-show="error" x-text="error"
+                                       style="font-size:11px; color:var(--color-red-600); margin:4px 0 0"></p>
+                                </div>
+                            @endif
+                        </td>
                     </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    @foreach($logs as $log)
-                        @php
-                            $evaluation = $log->evaluations->last();
-                            $promptPreview = is_array($log->prompt)
-                                ? collect($log->prompt)->map(fn($v) => is_string($v) ? $v : json_encode($v))->implode(' ')
-                                : (string) $log->prompt;
-                            $promptPreview = Str::limit(strip_tags($promptPreview), 80);
-                        @endphp
-                        <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="font-mono text-xs text-gray-500">{{ substr($log->id, 0, 8) }}</span>
-                            </td>
-                            <td class="px-6 py-4 max-w-xs">
-                                <span class="text-sm text-gray-600 truncate block">{{ $promptPreview }}</span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ $log->created_at->format('M j, Y H:i') }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                @if($evaluation)
-                                    @php
-                                        $s = $evaluation->overall_score;
-                                        $sc = $s >= 80 ? 'bg-green-100 text-green-800' : ($s >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800');
-                                    @endphp
-                                    <a href="{{ route('ai-companion.evaluation', $evaluation->id) }}"
-                                       class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold {{ $sc }} hover:opacity-80 transition-opacity">
-                                        {{ $s }}/100 &rarr;
-                                    </a>
-                                @else
-                                    <div x-data="{ loading: false, error: null }"
-                                         x-on:submit.prevent>
-                                        <button
-                                            x-on:click="
-                                                loading = true; error = null;
-                                                fetch('{{ route('ai-companion.log.evaluate', $log->id) }}', {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-                                                        'Accept': 'application/json',
-                                                    }
-                                                })
-                                                .then(r => r.json())
-                                                .then(data => {
-                                                    if (data.redirect) window.location.href = data.redirect;
-                                                    else { error = data.error ?? 'Unknown error'; loading = false; }
-                                                })
-                                                .catch(() => { error = 'Request failed'; loading = false; })
-                                            "
-                                            :disabled="loading"
-                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
-                                            <svg x-show="loading" class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                            </svg>
-                                            <span x-text="loading ? 'Evaluating…' : 'Evaluate'"></span>
-                                        </button>
-                                        <p x-show="error" x-text="error" class="text-xs text-red-500 mt-1"></p>
-                                    </div>
-                                @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                @endforeach
+            </tbody>
+        </table>
 
-            <div class="px-6 py-4 border-t border-gray-100">
+        @if($logs->hasPages())
+            <div style="padding: 12px 16px; border-top: 1px solid var(--color-default-100)">
                 {{ $logs->links() }}
             </div>
         @endif
-    </div>
+    @endif
+</div>
 @endsection
