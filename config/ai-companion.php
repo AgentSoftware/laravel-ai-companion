@@ -13,12 +13,13 @@ return [
         'enabled' => env('AI_EVALUATION_ENABLED', true),
 
         /*
-         | The Anthropic model used by the LLM judge. Must be an Anthropic model
-         | identifier — the judge is hardcoded to the Anthropic provider.
-         | A cheaper/faster model (Haiku-class) is recommended since it runs once
-         | per log evaluated.
+         | The provider and model used by the LLM judge. Set AI_EVALUATION_PROVIDER
+         | to any provider key configured in config/ai.php (e.g. 'anthropic', 'gemini').
+         | The model must belong to that provider.
+         | A cheaper/faster model is recommended since it runs once per log evaluated.
          */
-        'model' => env('AI_EVALUATION_MODEL', 'claude-haiku-4-5-20251001'),
+        'provider' => env('AI_EVALUATION_PROVIDER', 'anthropic'),
+        'model'    => env('AI_EVALUATION_MODEL', 'claude-haiku-4-5-20251001'),
 
         /*
          | Register Scorer subclasses here to provide explicit evaluation criteria

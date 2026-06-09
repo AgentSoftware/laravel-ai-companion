@@ -26,10 +26,11 @@ class EvaluationRunner
         $scorer = $this->resolveScorer($log->agent);
         $criteriaPrompt = $this->buildCriteriaPrompt($scorer);
         $judge = ($this->judgeFactory ?? fn (string $p): LlmJudge => new LlmJudge($p))($criteriaPrompt);
-        $model = config('ai-companion.evaluation.model', 'claude-haiku-4-5-20251001');
+        $model    = config('ai-companion.evaluation.model', 'claude-haiku-4-5-20251001');
+        $provider = config('ai-companion.evaluation.provider', 'anthropic');
 
         try {
-            $response = $judge->prompt($this->buildLogPrompt($log), model: $model);
+            $response = $judge->prompt($this->buildLogPrompt($log), provider: $provider, model: $model);
 
             if (! $response instanceof StructuredAgentResponse) {
                 Log::warning('LlmJudge returned a non-structured response', [
