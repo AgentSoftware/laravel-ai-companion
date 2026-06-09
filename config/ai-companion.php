@@ -18,8 +18,8 @@ return [
          | The model must belong to that provider.
          | A cheaper/faster model is recommended since it runs once per log evaluated.
          */
-        'provider' => env('AI_EVALUATION_PROVIDER', 'anthropic'),
-        'model'    => env('AI_EVALUATION_MODEL', 'claude-haiku-4-5-20251001'),
+        'provider' => env('AI_EVALUATION_PROVIDER', 'gemini'),
+        'model'    => env('AI_EVALUATION_MODEL', 'gemini-2.0-flash'),
 
         /*
          | Register Scorer subclasses here to provide explicit evaluation criteria
