@@ -33,7 +33,6 @@ class LlmJudge implements Agent, HasStructuredOutput
         {$this->criteriaPrompt}
 
         Score each criterion from 0 to 100. Provide one sentence of specific, actionable feedback per criterion.
-        The overall_score should reflect the weighted average of the criteria scores.
         INSTRUCTIONS;
     }
 
@@ -43,9 +42,6 @@ class LlmJudge implements Agent, HasStructuredOutput
     public function schema(JsonSchema $schema): array
     {
         return [
-            'overall_score' => $schema->integer()
-                ->description('Overall quality score 0–100')
-                ->required(),
             'criteria' => $schema->array()
                 ->items(
                     $schema->object([

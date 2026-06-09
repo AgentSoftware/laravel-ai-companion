@@ -15,16 +15,22 @@ readonly class EvaluationResult
     ) {}
 
     /**
-     * @param  array{overall_score: int|string, criteria: list<array{name: string, score: int|string, feedback: string}>, summary: string}  $data
+     * @param  array{criteria: list<array{name: string, score: int|string, feedback: string}>, summary: string}  $data
      */
     public static function fromArray(array $data, string $judgeModel): self
     {
+        $criteria = array_map(
+            static fn (array $c): CriterionResult => CriterionResult::fromArray($c),
+            $data['criteria'],
+        );
+
+        $overallScore = count($criteria) > 0
+            ? (int) round(array_sum(array_map(fn (CriterionResult $c) => $c->score, $criteria)) / count($criteria))
+            : 0;
+
         return new self(
-            overallScore: (int) $data['overall_score'],
-            criteria: array_map(
-                static fn (array $c): CriterionResult => CriterionResult::fromArray($c),
-                $data['criteria'],
-            ),
+            overallScore: $overallScore,
+            criteria: $criteria,
             summary: $data['summary'],
             judgeModel: $judgeModel,
         );
