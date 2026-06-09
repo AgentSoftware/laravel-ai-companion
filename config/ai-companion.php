@@ -33,4 +33,10 @@ return [
          */
         'scorers' => [],
     ],
+
+    'dashboard' => [
+        'enabled' => env('AI_COMPANION_DASHBOARD_ENABLED', true),
+        'middleware' => ['web'],
+        'path' => 'ai-companion',
+    ],
 ];
