@@ -220,6 +220,26 @@ it('returns null and writes no row when judge returns empty criteria', function 
         ->and(AiEvaluation::count())->toBe(0);
 });
 
+it('handles a plain string response when building the log prompt', function (): void {
+    $log = makeResponseLog(['response' => 'Plain text response without structure.']);
+
+    $capturedPrompt = '';
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')
+        ->once()
+        ->withArgs(function (string $prompt) use (&$capturedPrompt): bool {
+            $capturedPrompt = $prompt;
+
+            return true;
+        })
+        ->andReturn(makeJudgeResponse());
+
+    $runner = makeRunner(fn (string $criteria) => $fakeJudge);
+    $runner->run($log);
+
+    expect($capturedPrompt)->toContain('Plain text response without structure.');
+});
+
 it('loads the response log via the log() relation on AiEvaluation', function (): void {
     $log = makeResponseLog();
 
