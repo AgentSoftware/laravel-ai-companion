@@ -11,6 +11,7 @@ use AgentSoftware\LaravelAiCompanion\Models\AiEvaluation;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 
 use function Laravel\Prompts\multiselect;
 
@@ -143,9 +144,9 @@ class EvaluateCommand extends Command
         $this->line("  {$agent}   avg: {$avg}/100   {$evaluated} evaluated".($skipped > 0 ? ", {$skipped} skipped" : ''));
 
         $allCriteria = $evaluations
-            ->flatMap(fn ($e) => $e->criteria)
+            ->flatMap(fn (AiEvaluation $e): array => $e->criteria)
             ->groupBy('name')
-            ->map(fn ($group) => (int) round((float) $group->avg('score')));
+            ->map(fn (Collection $group): int => (int) round((float) $group->avg('score')));
 
         if ($allCriteria->isNotEmpty()) {
             $weakest = $allCriteria->sort()->keys()->first();
