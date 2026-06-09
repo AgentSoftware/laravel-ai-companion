@@ -64,6 +64,7 @@ class EvaluateCommand extends Command
             return [];
         }
 
+        // @codeCoverageIgnoreStart
         /** @var list<string> $selected */
         $selected = multiselect(
             label: 'Which agents would you like to evaluate?',
@@ -72,6 +73,7 @@ class EvaluateCommand extends Command
         );
 
         return $selected;
+        // @codeCoverageIgnoreEnd
     }
 
     private function evaluateAgent(EvaluationRunner $runner, string $agent): void

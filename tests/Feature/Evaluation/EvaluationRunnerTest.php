@@ -8,6 +8,7 @@ use AgentSoftware\LaravelAiCompanion\Evaluation\Judge\LlmJudge;
 use AgentSoftware\LaravelAiCompanion\Evaluation\Scorers\Scorer;
 use AgentSoftware\LaravelAiCompanion\Models\AiEvaluation;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
+use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\StructuredAgentResponse;
@@ -161,4 +162,74 @@ it('omits the agent instructions section when instructions are null', function (
     $runner->run($log);
 
     expect($capturedPrompt)->not->toContain('AGENT INSTRUCTIONS');
+});
+
+it('returns null immediately when evaluation is disabled', function (): void {
+    config()->set('ai-companion.evaluation.enabled', false);
+
+    $log = makeResponseLog();
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldNotReceive('prompt');
+
+    $runner = makeRunner(fn (string $criteria) => $fakeJudge);
+    $result = $runner->run($log);
+
+    expect($result)->toBeNull()
+        ->and(AiEvaluation::count())->toBe(0);
+});
+
+it('returns null and writes no row when judge returns a non-structured response', function (): void {
+    $log = makeResponseLog();
+
+    $nonStructured = new AgentResponse(
+        invocationId: 'inv-plain',
+        text: 'I cannot evaluate this.',
+        usage: new Usage(10, 5, 0, 0),
+        meta: new Meta,
+    );
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')->once()->andReturn($nonStructured);
+
+    $runner = makeRunner(fn (string $criteria) => $fakeJudge);
+    $result = $runner->run($log);
+
+    expect($result)->toBeNull()
+        ->and(AiEvaluation::count())->toBe(0);
+});
+
+it('returns null and writes no row when judge returns empty criteria', function (): void {
+    $log = makeResponseLog();
+
+    $emptyResponse = new StructuredAgentResponse(
+        invocationId: 'inv-empty',
+        structured: ['criteria' => [], 'summary' => 'Nothing evaluated.'],
+        text: '{}',
+        usage: new Usage(10, 5, 0, 0),
+        meta: new Meta,
+    );
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')->once()->andReturn($emptyResponse);
+
+    $runner = makeRunner(fn (string $criteria) => $fakeJudge);
+    $result = $runner->run($log);
+
+    expect($result)->toBeNull()
+        ->and(AiEvaluation::count())->toBe(0);
+});
+
+it('loads the response log via the log() relation on AiEvaluation', function (): void {
+    $log = makeResponseLog();
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')->once()->andReturn(makeJudgeResponse());
+
+    $runner = makeRunner(fn (string $criteria) => $fakeJudge);
+    $runner->run($log);
+
+    $evaluation = AiEvaluation::first();
+    expect($evaluation->log)->toBeInstanceOf(AiResponseLog::class)
+        ->and($evaluation->log->id)->toBe($log->id);
 });

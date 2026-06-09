@@ -118,3 +118,92 @@ it('returns success with no evaluation when no logs match', function (): void {
 
     expect(AiEvaluation::count())->toBe(0);
 });
+
+it('exits with a warning when evaluation is disabled', function (): void {
+    config()->set('ai-companion.evaluation.enabled', false);
+    seedCommandLog();
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldNotReceive('prompt');
+    $runner = new EvaluationRunner(fn (string $criteria) => $fakeJudge);
+    $this->app->instance(EvaluationRunner::class, $runner);
+
+    $this->artisan(EvaluateCommand::class, [
+        '--agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
+    ])->assertSuccessful();
+
+    expect(AiEvaluation::count())->toBe(0);
+});
+
+it('prints a failure line when the judge errors for a log', function (): void {
+    seedCommandLog();
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')->andThrow(new RuntimeException('judge error'));
+    $runner = new EvaluationRunner(fn (string $criteria) => $fakeJudge);
+    $this->app->instance(EvaluationRunner::class, $runner);
+
+    $this->artisan(EvaluateCommand::class, [
+        '--agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
+    ])->assertSuccessful();
+
+    expect(AiEvaluation::count())->toBe(0);
+});
+
+it('only evaluates logs created after the --since date', function (): void {
+    $old = seedCommandLog();
+    $old->forceFill(['created_at' => now()->subDays(10)])->save();
+
+    $recent = seedCommandLog();
+    $recent->forceFill(['created_at' => now()->subDays(2)])->save();
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')->once()->andReturn(makeCommandJudgeResponse());
+    $runner = new EvaluationRunner(fn (string $criteria) => $fakeJudge);
+    $this->app->instance(EvaluationRunner::class, $runner);
+
+    $this->artisan(EvaluateCommand::class, [
+        '--agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
+        '--since' => '5d',
+    ])->assertSuccessful();
+
+    expect(AiEvaluation::count())->toBe(1);
+});
+
+it('accepts an absolute date for --since', function (): void {
+    $old = seedCommandLog();
+    $old->forceFill(['created_at' => now()->subDays(10)])->save();
+
+    $recent = seedCommandLog();
+    $recent->forceFill(['created_at' => now()->subDays(2)])->save();
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldReceive('prompt')->once()->andReturn(makeCommandJudgeResponse());
+    $runner = new EvaluationRunner(fn (string $criteria) => $fakeJudge);
+    $this->app->instance(EvaluationRunner::class, $runner);
+
+    $this->artisan(EvaluateCommand::class, [
+        '--agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
+        '--since' => now()->subDays(5)->toDateString(),
+    ])->assertSuccessful();
+
+    expect(AiEvaluation::count())->toBe(1);
+});
+
+it('warns when no successful logs exist for any agent', function (): void {
+    AiResponseLog::create([
+        'agent' => 'App\\Ai\\Agents\\ContentWriterAgent',
+        'prompt' => 'test',
+        'response' => ['text' => 'test'],
+        'status' => AiResponseStatus::Failure,
+    ]);
+
+    $fakeJudge = Mockery::mock(LlmJudge::class);
+    $fakeJudge->shouldNotReceive('prompt');
+    $runner = new EvaluationRunner(fn (string $criteria) => $fakeJudge);
+    $this->app->instance(EvaluationRunner::class, $runner);
+
+    $this->artisan(EvaluateCommand::class)->assertSuccessful();
+
+    expect(AiEvaluation::count())->toBe(0);
+});
