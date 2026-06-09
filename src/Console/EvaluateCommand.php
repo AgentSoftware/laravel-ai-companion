@@ -54,6 +54,7 @@ class EvaluateCommand extends Command
 
         $available = AiResponseLog::query()
             ->select('agent')
+            ->where('status', AiResponseStatus::Success)
             ->distinct()
             ->orderBy('agent')
             ->pluck('agent');
@@ -92,6 +93,10 @@ class EvaluateCommand extends Command
             $this->components->info("No unevaluated logs found for {$agent}.");
 
             return;
+        }
+
+        if ($this->option('re-run')) {
+            AiEvaluation::whereIn('ai_response_log_id', $logs->pluck('id'))->delete();
         }
 
         $this->components->info("Evaluating {$agent} ({$logs->count()} logs)...");

@@ -23,12 +23,11 @@ function seedCommandLog(array $overrides = []): AiResponseLog
     ], $overrides));
 }
 
-function makeCommandJudgeResponse(int $score = 78): StructuredAgentResponse
+function makeCommandJudgeResponse(): StructuredAgentResponse
 {
     return new StructuredAgentResponse(
         invocationId: 'j1',
         structured: [
-            'overall_score' => $score,
             'criteria' => [
                 ['name' => 'accuracy', 'score' => 80, 'feedback' => 'Mostly accurate.'],
                 ['name' => 'tone',     'score' => 75, 'feedback' => 'Professional but bland.'],
@@ -93,7 +92,7 @@ it('re-evaluates already-evaluated logs when --re-run is passed', function (): v
     ]);
 
     $fakeJudge = Mockery::mock(LlmJudge::class);
-    $fakeJudge->shouldReceive('prompt')->once()->andReturn(makeCommandJudgeResponse(55));
+    $fakeJudge->shouldReceive('prompt')->once()->andReturn(makeCommandJudgeResponse());
     $runner = new EvaluationRunner(fn (string $criteria) => $fakeJudge);
     $this->app->instance(EvaluationRunner::class, $runner);
 
@@ -102,7 +101,9 @@ it('re-evaluates already-evaluated logs when --re-run is passed', function (): v
         '--re-run' => true,
     ])->assertSuccessful();
 
-    expect(AiEvaluation::count())->toBe(2);
+    // --re-run replaces the old evaluation rather than appending a duplicate row
+    expect(AiEvaluation::count())->toBe(1)
+        ->and(AiEvaluation::first()->overall_score)->toBe(78);
 });
 
 it('returns success with no evaluation when no logs match', function (): void {

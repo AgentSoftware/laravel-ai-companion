@@ -23,10 +23,14 @@ class EvaluationRunner
 
     public function run(AiResponseLog $log): ?EvaluationResult
     {
+        if (! config('ai-companion.evaluation.enabled', true)) {
+            return null;
+        }
+
         $scorer = $this->resolveScorer($log->agent);
-        $criteriaPrompt = $this->buildCriteriaPrompt($scorer);
+        $criteriaPrompt = $this->buildCriteriaPrompt($scorer, $log->instructions);
         $judge = ($this->judgeFactory ?? fn (string $p): LlmJudge => new LlmJudge($p))($criteriaPrompt);
-        $model    = config('ai-companion.evaluation.model', 'claude-haiku-4-5-20251001');
+        $model = config('ai-companion.evaluation.model', 'claude-haiku-4-5-20251001');
         $provider = config('ai-companion.evaluation.provider', 'anthropic');
 
         try {
@@ -41,9 +45,18 @@ class EvaluationRunner
                 return null;
             }
 
-            /** @var array{overall_score: int, criteria: list<array{name: string, score: int, feedback: string}>, summary: string} $structured */
+            /** @var array{criteria: list<array{name: string, score: int, feedback: string}>, summary: string} $structured */
             $structured = $response->structured;
             $result = EvaluationResult::fromArray($structured, $model);
+
+            if (empty($result->criteria)) {
+                Log::warning('LlmJudge returned empty criteria — skipping evaluation', [
+                    'agent' => $log->agent,
+                    'log_id' => $log->id,
+                ]);
+
+                return null;
+            }
 
             AiEvaluation::create([
                 'ai_response_log_id' => $log->id,
@@ -59,7 +72,13 @@ class EvaluationRunner
             ]);
 
             return $result;
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            Log::error('AI evaluation failed', [
+                'agent' => $log->agent,
+                'log_id' => $log->id,
+                'error' => $e->getMessage(),
+            ]);
+
             return null;
         }
     }
@@ -80,13 +99,18 @@ class EvaluationRunner
         return new AutoInferredScorer($agentClass);
     }
 
-    private function buildCriteriaPrompt(Scorer $scorer): string
+    private function buildCriteriaPrompt(Scorer $scorer, ?string $instructions): string
     {
         $criteria = $scorer->criteria();
 
         if ($criteria === []) {
-            return 'Infer 3–5 appropriate evaluation criteria from the agent instructions provided. '
-                .'Choose criteria that best assess whether the agent achieved its stated purpose.';
+            if ($instructions !== null) {
+                return 'Infer 3–5 appropriate evaluation criteria from the agent instructions provided. '
+                    .'Choose criteria that best assess whether the agent achieved its stated purpose.';
+            }
+
+            return 'No agent instructions are available. Evaluate on general quality criteria: '
+                .'accuracy, clarity, helpfulness, completeness, and appropriate tone.';
         }
 
         $lines = array_map(

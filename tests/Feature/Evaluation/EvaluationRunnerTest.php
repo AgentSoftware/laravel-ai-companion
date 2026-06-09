@@ -28,7 +28,6 @@ function makeJudgeResponse(): StructuredAgentResponse
     return new StructuredAgentResponse(
         invocationId: 'judge-inv-1',
         structured: [
-            'overall_score' => 82,
             'criteria' => [
                 ['name' => 'accuracy',     'score' => 85, 'feedback' => 'Reflects company info correctly.'],
                 ['name' => 'completeness', 'score' => 70, 'feedback' => 'Missing a CTA.'],

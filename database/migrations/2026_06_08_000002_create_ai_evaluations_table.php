@@ -16,6 +16,7 @@ return new class extends Migration
                 ->constrained('ai_response_logs')
                 ->cascadeOnDelete();
             $table->string('agent')->index();
+            $table->unique('ai_response_log_id');
             $table->string('scorer')->nullable();
             $table->unsignedSmallInteger('overall_score');
             $table->json('criteria');

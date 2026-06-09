@@ -19,7 +19,7 @@ return [
          | A cheaper/faster model is recommended since it runs once per log evaluated.
          */
         'provider' => env('AI_EVALUATION_PROVIDER', 'gemini'),
-        'model'    => env('AI_EVALUATION_MODEL', 'gemini-3.5-flash'),
+        'model' => env('AI_EVALUATION_MODEL', 'gemini-3.5-flash'),
 
         /*
          | Register Scorer subclasses here to provide explicit evaluation criteria
