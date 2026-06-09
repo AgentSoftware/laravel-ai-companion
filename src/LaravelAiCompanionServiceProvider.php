@@ -20,6 +20,7 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
+            ->hasViews()
             ->discoversMigrations()
             ->hasCommands([
                 EvaluateCommand::class,
