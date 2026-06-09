@@ -11,7 +11,6 @@ use AgentSoftware\LaravelAiCompanion\Models\AiEvaluation;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Collection;
 
 use function Laravel\Prompts\multiselect;
 
@@ -41,9 +40,7 @@ class EvaluateCommand extends Command
             return self::SUCCESS;
         }
 
-        foreach ($agents as $agent) {
-            $this->evaluateAgent($runner, $agent);
-        }
+        collect($agents)->each(fn (string $agent) => $this->evaluateAgent($runner, $agent));
 
         return self::SUCCESS;
     }
@@ -55,22 +52,20 @@ class EvaluateCommand extends Command
             return [(string) $agent];
         }
 
-        /** @var list<string> $available */
         $available = AiResponseLog::query()
             ->select('agent')
             ->distinct()
             ->orderBy('agent')
-            ->pluck('agent')
-            ->all();
+            ->pluck('agent');
 
-        if ($available === []) {
+        if ($available->isEmpty()) {
             return [];
         }
 
         /** @var list<string> $selected */
         $selected = multiselect(
             label: 'Which agents would you like to evaluate?',
-            options: array_combine($available, $available),
+            options: $available->mapWithKeys(fn (string $a) => [$a => $a])->all(),
             required: true,
         );
 
@@ -91,7 +86,6 @@ class EvaluateCommand extends Command
             $query->where('created_at', '>=', $this->parseSince((string) $since));
         }
 
-        /** @var Collection<int, AiResponseLog> $logs */
         $logs = $query->limit((int) $this->option('limit'))->get();
 
         if ($logs->isEmpty()) {
@@ -103,29 +97,27 @@ class EvaluateCommand extends Command
         $this->components->info("Evaluating {$agent} ({$logs->count()} logs)...");
         $this->newLine();
 
-        $evaluated = 0;
-        $skipped = 0;
+        [$succeeded, $failed] = $logs
+            ->map(fn (AiResponseLog $log) => ['log' => $log, 'result' => $runner->run($log)])
+            ->each(function (array $item): void {
+                ['log' => $log, 'result' => $result] = $item;
 
-        foreach ($logs as $log) {
-            $result = $runner->run($log);
+                if ($result === null) {
+                    $this->line(" <fg=red>✗</>  log {$this->shortId($log->id)}  FAILED — judge error, skipped");
 
-            if ($result === null) {
-                $this->line(" <fg=red>✗</>  log {$this->shortId($log->id)}  FAILED — judge error, skipped");
-                $skipped++;
+                    return;
+                }
 
-                continue;
-            }
+                $criteriaLine = collect($result->criteria)
+                    ->map(fn (CriterionResult $c): string => "{$c->name}:{$c->score}")
+                    ->implode('  ');
 
-            $criteriaLine = collect($result->criteria)
-                ->map(fn (CriterionResult $c): string => "{$c->name}:{$c->score}")
-                ->implode('  ');
-
-            $this->line(" <fg=green>✓</>  log {$this->shortId($log->id)}  overall: {$result->overallScore}   {$criteriaLine}");
-            $evaluated++;
-        }
+                $this->line(" <fg=green>✓</>  log {$this->shortId($log->id)}  overall: {$result->overallScore}   {$criteriaLine}");
+            })
+            ->partition(fn (array $item) => $item['result'] !== null);
 
         $this->newLine();
-        $this->printSummary($agent, $evaluated, $skipped, (int) $this->option('limit'));
+        $this->printSummary($agent, $succeeded->count(), $failed->count(), (int) $this->option('limit'));
     }
 
     private function printSummary(string $agent, int $evaluated, int $skipped, int $limit): void
@@ -151,7 +143,7 @@ class EvaluateCommand extends Command
             ->map(fn ($group) => (int) round((float) $group->avg('score')));
 
         if ($allCriteria->isNotEmpty()) {
-            $weakest = $allCriteria->sortBy(fn ($v) => $v)->keys()->first();
+            $weakest = $allCriteria->sort()->keys()->first();
             $weakestScore = $allCriteria[$weakest];
             $this->line("  Lowest criterion: {$weakest} (avg {$weakestScore}) — consider reviewing the relevant part of the prompt.");
         }
