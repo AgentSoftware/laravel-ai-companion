@@ -8,6 +8,7 @@ use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
 use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\BraintrustExporter;
+use AgentSoftware\LaravelAiCompanion\Tracing\Listeners\ExportTrace;
 use AgentSoftware\LaravelAiCompanion\Tracing\TraceTimings;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
@@ -34,6 +35,10 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $this->app->singleton(TraceTimings::class);
 
         $this->app->bind(TraceExporter::class, BraintrustExporter::class);
+
+        if (config('ai-companion.braintrust.enabled')) {
+            Event::subscribe(ExportTrace::class);
+        }
 
         if (config('ai-companion.response_logs.prune_enabled')) {
             $this->app->afterResolving(Schedule::class, function (Schedule $schedule): void {
