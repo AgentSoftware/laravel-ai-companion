@@ -10,7 +10,7 @@ namespace AgentSoftware\LaravelAiCompanion\Tracing;
  */
 class TraceTimings
 {
-    private const MAX_ENTRIES = 500;
+    private const int MAX_ENTRIES = 500;
 
     /** @var array<string, float> */
     private array $startTimes = [];
