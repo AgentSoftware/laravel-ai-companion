@@ -107,6 +107,26 @@ it('resolves the project id once and caches it', function () {
         && $request->data() === ['name' => 'My Project']);
 });
 
+it('preserves an empty input array for no-argument tool calls', function () {
+    fakeBraintrustApi();
+
+    $span = neutralSpan();
+    $span['type'] = 'tool';
+    $span['input'] = [];
+
+    app(BraintrustExporter::class)->ship([$span]);
+
+    Http::assertSent(function (Request $request): bool {
+        if (! str_contains($request->url(), '/v1/project_logs/proj-123/insert')) {
+            return false;
+        }
+
+        $event = $request->data()['events'][0];
+
+        return array_key_exists('input', $event) && $event['input'] === [];
+    });
+});
+
 it('throws on http failure so the queued job retries', function () {
     Http::fake([
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-123']),

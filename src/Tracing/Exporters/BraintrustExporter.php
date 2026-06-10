@@ -48,7 +48,7 @@ class BraintrustExporter implements TraceExporter
             'error' => $span['error'],
             'metadata' => $span['metadata'],
             'metrics' => array_filter($span['metrics'], fn (mixed $value): bool => $value !== null),
-        ], fn (mixed $value): bool => $value !== null && $value !== []);
+        ], fn (mixed $value): bool => $value !== null);
     }
 
     /**
