@@ -10,8 +10,10 @@ Ship every Laravel AI SDK agent interaction to [Braintrust](https://www.braintru
 ## Architecture
 
 ```
-laravel/ai events ──► Braintrust listeners ──► SpanBuilder ──► queued ShipSpansToBraintrust job ──► POST /v1/project_logs/{project_id}/insert
+laravel/ai events ──► listeners ──► SpanBuilder ──► queued ShipSpans job ──► TraceExporter (contract) ──► BraintrustExporter ──► POST /v1/project_logs/{project_id}/insert
 ```
+
+Everything upstream of the `TraceExporter` contract is operator-agnostic: listeners and the span builder produce a neutral span shape, and only the bound exporter implementation knows it is talking to Braintrust. Swapping operators (e.g. to Langfuse or a self-hosted collector) means binding a different implementation — no listener, builder, or job changes.
 
 The exporter rides the same hooks the package already uses: `laravel/ai` lifecycle events and the `ai_usage_source_id` / `ai_usage_source_model` values that consuming apps place in Laravel `Context` (e.g. websites.spectre's `SetAiUsageSource` job middleware). Because `Context` propagates across queued jobs, a multi-job business process (such as the onboarding pipeline's ~20 chained jobs) lands in Braintrust as a single trace tree with no new plumbing.
 
@@ -44,13 +46,18 @@ Mirrors the package's existing grouping: `source_model` is the process, the agen
 
 ## Components
 
-All under `src/Braintrust/`:
+Operator-agnostic core under `src/Tracing/`:
 
+- **`Contracts\TraceExporter`** — the swap point: `ship(array $spans): void` (plus `enabled(): bool` for the listeners' guard). Bound as a singleton in the service provider; consuming apps can rebind it to switch operators without touching anything else in the package.
 - **`TraceTimings`** — singleton holding `microtime(true)` start times keyed by `invocationId` / `toolInvocationId`. Written at `PromptingAgent` / `InvokingTool`, consumed at `AgentPrompted` / `ToolInvoked`. Event pairs always occur within one process, so in-memory storage is safe.
-- **`Listeners\ExportToBraintrust`** — event subscriber for `PromptingAgent`, `AgentPrompted`, `InvokingTool`, `ToolInvoked`, `AgentFailedOver`. Builds plain-array span events and dispatches the ship job. Every handler body is wrapped in `rescue()` — the exporter must never break an AI call.
-- **`SpanBuilder`** — pure functions mapping event + timing + context → Braintrust event arrays. No IO; unit-tested directly.
-- **`Jobs\ShipSpansToBraintrust`** — queued job carrying only plain arrays (no SDK objects). Resolves and caches the project ID, posts the batch to `/v1/project_logs/{project_id}/insert`, retries with backoff, and logs-and-drops on final failure.
-- **Service provider wiring** — listeners registered in `packageBooted()` only when `braintrust.enabled` is true and an API key is present.
+- **`Listeners\ExportTrace`** — event subscriber for `PromptingAgent`, `AgentPrompted`, `InvokingTool`, `ToolInvoked`, `AgentFailedOver`. Builds neutral span arrays and dispatches the ship job. Every handler body is wrapped in `rescue()` — the exporter must never break an AI call.
+- **`SpanBuilder`** — pure functions mapping event + timing + context → neutral span arrays (ids, parentage, input/output, metadata, token metrics, start/end). No IO and no Braintrust-specific field names; unit-tested directly.
+- **`Jobs\ShipSpans`** — queued job carrying only plain arrays (no SDK objects). Resolves the bound `TraceExporter` from the container and hands it the batch. Retries with backoff; logs-and-drops on final failure.
+
+Braintrust implementation under `src/Tracing/Exporters/`:
+
+- **`BraintrustExporter implements TraceExporter`** — maps neutral spans to Braintrust event format (`span_id`/`root_span_id`/`parent_span_id`, `metrics` field names), resolves and caches the project ID, and posts to `/v1/project_logs/{project_id}/insert`.
+- **Service provider wiring** — binds `TraceExporter` to `BraintrustExporter` and registers listeners in `packageBooted()` only when `braintrust.enabled` is true and an API key is present.
 
 ## Error and failover capture
 
@@ -62,6 +69,7 @@ All under `src/Braintrust/`:
 Pest + Orchestra Testbench, consistent with existing package tests:
 
 - Fire SDK events with fake data → assert ship jobs queued with correct span arrays (`Queue::fake`).
+- Contract swap: bind a fake `TraceExporter` and assert it receives the batch — proves the seam works and gives consuming apps a testing pattern.
 - Assert HTTP payload shape and auth header (`Http::fake`), including project-ID resolution and caching.
 - Trace shape: with source context set → root + child spans share `root_span_id`; without → agent span is root.
 - Resilience: Braintrust down / missing API key / `enabled=false` → no exceptions, no queued jobs (where applicable), agent calls unaffected.
