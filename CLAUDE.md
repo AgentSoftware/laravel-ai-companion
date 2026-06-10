@@ -43,6 +43,7 @@ Hard-won API facts (verified 2026-06, cost us production failures — keep these
 - `metrics` and `metadata` must be JSON **objects or absent** — an empty PHP array encodes to `[]` (JSON array) and the API rejects the whole batch with `400 invalid_type`. Never ship them empty.
 - Metrics field names: `start`/`end` (unix epoch seconds, float), `prompt_tokens`, `completion_tokens`, `tokens`; extra numeric keys (cache/reasoning tokens) are allowed as custom metrics. Cost is derived from `metadata.model`.
 - `POST /v1/project {name}` is find-or-create; the project id is cached forever per name.
+- The insert endpoint has a **20mb payload cap** — `BraintrustExporter` chunks events per request (`ai-companion.braintrust.max_payload_bytes`, default 10mb for headroom) and drops single events that exceed it with a log warning.
 - **Data planes**: some orgs (including ours, Street Group) are EU-pinned — inserts to the default `api.braintrust.dev` fail with `421 DataPlaneRedirectError`. Consuming apps must set `BRAINTRUST_API_URL=https://api-eu.braintrust.dev`. A future improvement could follow the 421's `RedirectUrl` automatically.
 - Scoring (LLM-as-a-judge, online scoring rules, datasets, experiments) happens entirely inside Braintrust — this package only ships spans. Do not add scoring code here.
 
