@@ -128,7 +128,7 @@ With a source set, all agent calls for that source share one Braintrust trace tr
 
 ### Delivery guarantees
 
-Spans ship via a queued job (`ShipSpans`). The exporter never throws into AI calls — all export errors are caught and suppressed. Failed batches retry three times with backoff (10 s, 60 s), then are dropped with a `Log::warning`.
+Spans ship via a queued job (`ShipSpans`). The exporter never throws into AI calls — all export errors are caught and suppressed. Failed batches are attempted three times with backoff (10 s, 60 s), then dropped with a `Log::warning`.
 
 ### Hard-failure capture
 
@@ -142,7 +142,7 @@ class SegmentBuilderAgent implements Agent, HasMiddleware
 {
     public function middleware(): array
     {
-        return [new TraceAiResponse];
+        return [TraceAiResponse::class];
     }
 }
 ```
