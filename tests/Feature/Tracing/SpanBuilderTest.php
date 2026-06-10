@@ -18,6 +18,7 @@ use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\QueuedAgentResponse;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
 function makeTracingAgent(): Agent
@@ -191,4 +192,64 @@ it('builds a tool span parented to its agent invocation', function () {
         ->and($span['output'])->toBe('found 3')
         ->and($span['metrics']['start'])->toBe(100.0)
         ->and($span['metrics']['end'])->toBe(100.4);
+});
+
+it('falls back to the prompt model when response meta has no provider or model', function () {
+    $response = new AgentResponse(
+        invocationId: 'inv-2',
+        text: 'World',
+        usage: new Usage(
+            promptTokens: 100,
+            completionTokens: 50,
+            cacheWriteInputTokens: 10,
+            cacheReadInputTokens: 5,
+        ),
+        meta: new Meta,
+    );
+
+    $prompt = new AgentPrompt(
+        agent: makeTracingAgent(),
+        prompt: 'Hello',
+        attachments: [],
+        provider: Mockery::mock(TextProvider::class),
+        model: 'claude-haiku-4-5-20251001',
+        invocationId: 'inv-2',
+    );
+
+    $event = new AgentPrompted(invocationId: 'inv-2', prompt: $prompt, response: $response);
+    $span = app(SpanBuilder::class)->agentSpan($event, 100.0, 101.0);
+
+    expect($span['metadata']['model'])->toBe('claude-haiku-4-5-20251001')
+        ->and($span['metadata'])->not->toHaveKey('provider');
+});
+
+it('uses the structured array as span output for a StructuredAgentResponse', function () {
+    $structured = ['name' => 'Elliot', 'score' => 42];
+
+    $response = new StructuredAgentResponse(
+        invocationId: 'inv-3',
+        structured: $structured,
+        text: '{"name":"Elliot","score":42}',
+        usage: new Usage(
+            promptTokens: 100,
+            completionTokens: 50,
+            cacheWriteInputTokens: 10,
+            cacheReadInputTokens: 5,
+        ),
+        meta: new Meta(provider: 'anthropic', model: 'claude-haiku-4-5-20251001'),
+    );
+
+    $prompt = new AgentPrompt(
+        agent: makeTracingAgent(),
+        prompt: 'Hello',
+        attachments: [],
+        provider: Mockery::mock(TextProvider::class),
+        model: 'claude-haiku-4-5-20251001',
+        invocationId: 'inv-3',
+    );
+
+    $event = new AgentPrompted(invocationId: 'inv-3', prompt: $prompt, response: $response);
+    $span = app(SpanBuilder::class)->agentSpan($event, 100.0, 101.0);
+
+    expect($span['output'])->toBe($structured);
 });
