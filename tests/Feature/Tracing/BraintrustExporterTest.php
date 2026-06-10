@@ -127,6 +127,48 @@ it('preserves an empty input array for no-argument tool calls', function () {
     });
 });
 
+it('omits empty metrics and metadata that would serialize as json arrays', function () {
+    fakeBraintrustApi();
+
+    // Root spans ship with no metrics; PHP's empty array encodes to json []
+    // but Braintrust requires these fields to be objects (or absent).
+    $root = neutralSpan();
+    $root['id'] = 'root-1';
+    $root['parent_id'] = null;
+    $root['metadata'] = [];
+    $root['metrics'] = [];
+
+    app(BraintrustExporter::class)->ship([$root]);
+
+    Http::assertSent(function (Request $request): bool {
+        if (! str_contains($request->url(), '/v1/project_logs/proj-123/insert')) {
+            return false;
+        }
+
+        $event = $request->data()['events'][0];
+
+        return ! array_key_exists('metrics', $event)
+            && ! array_key_exists('metadata', $event);
+    });
+});
+
+it('omits metrics when every value is null', function () {
+    fakeBraintrustApi();
+
+    $span = neutralSpan();
+    $span['metrics'] = ['start' => null, 'end' => null];
+
+    app(BraintrustExporter::class)->ship([$span]);
+
+    Http::assertSent(function (Request $request): bool {
+        if (! str_contains($request->url(), '/v1/project_logs/proj-123/insert')) {
+            return false;
+        }
+
+        return ! array_key_exists('metrics', $request->data()['events'][0]);
+    });
+});
+
 it('throws on http failure so the queued job retries', function () {
     Http::fake([
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-123']),

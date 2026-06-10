@@ -34,6 +34,10 @@ class BraintrustExporter implements TraceExporter
      */
     private function toBraintrustEvent(array $span): array
     {
+        // Braintrust requires metadata and metrics to be json objects, but an
+        // empty PHP array encodes to a json array — omit them when empty.
+        $metrics = array_filter($span['metrics'], fn (mixed $value): bool => $value !== null);
+
         return array_filter([
             'id' => $span['id'],
             'span_id' => $span['id'],
@@ -46,8 +50,8 @@ class BraintrustExporter implements TraceExporter
             'input' => $span['input'],
             'output' => $span['output'],
             'error' => $span['error'],
-            'metadata' => $span['metadata'],
-            'metrics' => array_filter($span['metrics'], fn (mixed $value): bool => $value !== null),
+            'metadata' => $span['metadata'] !== [] ? $span['metadata'] : null,
+            'metrics' => $metrics !== [] ? $metrics : null,
         ], fn (mixed $value): bool => $value !== null);
     }
 
