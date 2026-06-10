@@ -7,6 +7,7 @@ use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\BraintrustExporter;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function () {
     config()->set('ai-companion.braintrust.enabled', true);
@@ -177,3 +178,58 @@ it('throws on http failure so the queued job retries', function () {
 
     app(BraintrustExporter::class)->ship([neutralSpan()]);
 })->throws(RequestException::class);
+
+it('chunks events into multiple requests to stay under the payload limit', function () {
+    config()->set('ai-companion.braintrust.max_payload_bytes', 800);
+    fakeBraintrustApi();
+
+    app(BraintrustExporter::class)->ship([neutralSpan(), neutralSpan(), neutralSpan()]);
+
+    // 1 project resolution + 2 chunked inserts (each event is ~362 bytes, two per chunk).
+    Http::assertSentCount(3);
+
+    Http::assertSent(function (Request $request): bool {
+        if (! str_contains($request->url(), '/insert')) {
+            return true;
+        }
+
+        return strlen((string) json_encode($request->data()['events'])) <= 800;
+    });
+});
+
+it('drops a single event larger than the payload limit and ships the rest', function () {
+    config()->set('ai-companion.braintrust.max_payload_bytes', 700);
+    fakeBraintrustApi();
+
+    Log::shouldReceive('warning')
+        ->once()
+        ->withArgs(fn (string $message): bool => str_contains($message, 'payload limit'));
+
+    $oversized = neutralSpan();
+    $oversized['id'] = 'huge-1';
+    $oversized['output'] = str_repeat('x', 2000);
+
+    app(BraintrustExporter::class)->ship([$oversized, neutralSpan()]);
+
+    Http::assertSent(function (Request $request): bool {
+        if (! str_contains($request->url(), '/insert')) {
+            return true;
+        }
+
+        return collect($request->data()['events'])->pluck('id')->all() === ['inv-1'];
+    });
+});
+
+it('sends no insert request when every event is dropped', function () {
+    config()->set('ai-companion.braintrust.max_payload_bytes', 700);
+    fakeBraintrustApi();
+
+    Log::shouldReceive('warning')->once();
+
+    $oversized = neutralSpan();
+    $oversized['output'] = str_repeat('x', 2000);
+
+    app(BraintrustExporter::class)->ship([$oversized]);
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/insert'));
+});

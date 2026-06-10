@@ -128,7 +128,7 @@ With a source set, all agent calls for that source share one Braintrust trace tr
 
 ### Delivery guarantees
 
-Spans ship via a queued job (`ShipSpans`). The exporter never throws into AI calls — all export errors are caught and suppressed. Failed batches are attempted three times with backoff (10 s, 60 s), then dropped with a `Log::warning`.
+Spans ship via a queued job (`ShipSpans`), and insert requests are chunked to stay under Braintrust's 20mb payload cap (tune via `AI_COMPANION_BRAINTRUST_MAX_PAYLOAD_BYTES`). The exporter never throws into AI calls — all export errors are caught and suppressed. Failed batches are attempted three times with backoff (10 s, 60 s), then dropped with a `Log::warning`.
 
 ### Hard-failure capture
 
