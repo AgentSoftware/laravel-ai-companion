@@ -42,3 +42,14 @@ it('collects and pulls pending failovers per agent class', function () {
         ->and($timings->pullFailovers('App\Agents\Foo'))->toBe([])
         ->and($timings->pullFailovers('App\Agents\Bar'))->toBe([]);
 });
+
+it('caps stored failovers to bound memory in long-lived workers', function () {
+    $timings = new TraceTimings;
+
+    foreach (range(1, 501) as $i) {
+        $timings->addFailover("App\\Agents\\Agent{$i}", ['error' => 'boom']);
+    }
+
+    expect($timings->pullFailovers('App\Agents\Agent1'))->toBe([])      // evicted
+        ->and($timings->pullFailovers('App\Agents\Agent501'))->toHaveCount(1); // retained
+});

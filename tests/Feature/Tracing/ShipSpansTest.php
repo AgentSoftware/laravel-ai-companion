@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
 use AgentSoftware\LaravelAiCompanion\Tracing\Jobs\ShipSpans;
+use Illuminate\Support\Facades\Log;
 
 class FakeTraceExporter implements TraceExporter
 {
@@ -51,4 +52,13 @@ it('uses the configured queue and connection', function () {
 
     expect($job->connection)->toBe('redis')
         ->and($job->queue)->toBe('tracing');
+});
+
+it('logs a warning and drops the batch on final failure', function () {
+    Log::shouldReceive('warning')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => $context['spans'] === 2
+            && $context['exception'] === 'boom');
+
+    (new ShipSpans([['id' => 'a'], ['id' => 'b']]))->failed(new RuntimeException('boom'));
 });

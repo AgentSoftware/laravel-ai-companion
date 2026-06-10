@@ -15,6 +15,7 @@ use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\PromptingAgent;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Exceptions\FailoverableException;
+use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\StreamedAgentResponse;
@@ -149,5 +150,26 @@ it('also ships tool spans', function () {
         return $span !== null
             && $span['type'] === 'tool'
             && $span['metrics']['start'] !== null;
+    });
+});
+
+it('records the exception message when the failover exception is throwable', function () {
+    subscribeTracingListeners();
+    Queue::fake();
+
+    $prompted = makeTracingPromptedEvent('inv-throwable');
+
+    event(new AgentFailedOver(
+        agent: $prompted->prompt->agent,
+        provider: Mockery::mock(Provider::class),
+        model: 'gpt-4.1',
+        exception: new RateLimitedException('rate limited hard'),
+    ));
+    event($prompted);
+
+    Queue::assertPushed(ShipSpans::class, function (ShipSpans $job): bool {
+        $span = collect($job->spans)->firstWhere('id', 'inv-throwable');
+
+        return $span['metadata']['failovers'][0]['error'] === 'rate limited hard';
     });
 });
