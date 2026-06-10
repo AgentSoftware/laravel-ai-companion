@@ -102,6 +102,9 @@ it('resolves the project id once and caches it', function () {
     $exporter->ship([neutralSpan()]);
 
     Http::assertSentCount(3); // 1 project resolution + 2 inserts
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/v1/project')
+        && $request->data() === ['name' => 'My Project']);
 });
 
 it('throws on http failure so the queued job retries', function () {
