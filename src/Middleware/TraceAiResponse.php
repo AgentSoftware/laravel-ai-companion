@@ -24,6 +24,9 @@ readonly class TraceAiResponse
     {
         $startedAt = microtime(true);
 
+        // Runs inside the SDK's failover loop, so this fires per failed provider
+        // attempt: a recovered failover ships one error span for the failed
+        // attempt plus the eventual success span from the ExportTrace listener.
         try {
             return $next($prompt);
         } catch (Throwable $exception) {
@@ -37,9 +40,10 @@ readonly class TraceAiResponse
 
     private function shipErrorSpan(AgentPrompt $prompt, Throwable $exception, float $startedAt): void
     {
-        // The ExportTrace listener never sees a hard failure (no AgentPrompted
-        // event fires), so consume the orphaned start entry here to avoid
-        // leaking it in the long-lived singleton — and prefer its earlier time.
+        // PromptingAgent already recorded a start entry, but AgentPrompted never
+        // fires on this failure path. The SDK passes a null invocationId into the
+        // middleware prompt on the standard path, so this pull is best-effort —
+        // TraceTimings caps its entries to bound any unconsumed leftovers.
         if ($prompt->invocationId !== null) {
             $startedAt = $this->timings->pull("agent:{$prompt->invocationId}") ?? $startedAt;
         }
@@ -67,6 +71,11 @@ readonly class TraceAiResponse
             ],
         ];
 
-        ShipSpans::dispatch(array_values(array_filter([$root, $span])));
+        $spans = array_values(array_filter([$root, $span]));
+
+        // Serialization guard: spans must survive the queue as plain data.
+        json_encode($spans, JSON_THROW_ON_ERROR);
+
+        ShipSpans::dispatch($spans);
     }
 }

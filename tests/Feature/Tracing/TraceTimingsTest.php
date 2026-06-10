@@ -21,6 +21,17 @@ it('returns null for unknown keys', function () {
     expect((new TraceTimings)->pull('missing'))->toBeNull();
 });
 
+it('caps stored entries to bound memory in long-lived workers', function () {
+    $timings = new TraceTimings;
+
+    foreach (range(1, 600) as $i) {
+        $timings->start("agent:{$i}", (float) $i);
+    }
+
+    expect($timings->pull('agent:1'))->toBeNull()      // evicted
+        ->and($timings->pull('agent:600'))->toBe(600.0); // retained
+});
+
 it('collects and pulls pending failovers per agent class', function () {
     $timings = new TraceTimings;
 
