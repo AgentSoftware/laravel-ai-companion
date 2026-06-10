@@ -43,6 +43,8 @@ readonly class ExportTrace
     public function handleAgentPrompted(AgentPrompted $event): void
     {
         rescue(function () use ($event): void {
+            // Pull timings and failovers before the streamed guard so entries are
+            // always consumed and never leak in the long-lived singleton.
             $startedAt = $this->timings->pull("agent:{$event->invocationId}");
             $failovers = $this->timings->pullFailovers($event->prompt->agent::class);
 
@@ -51,7 +53,7 @@ readonly class ExportTrace
             }
 
             $this->ship($this->builder->agentSpan($event, $startedAt, microtime(true), $failovers));
-        }, null, false);
+        });
     }
 
     public function handleInvokingTool(InvokingTool $event): void
@@ -67,7 +69,7 @@ readonly class ExportTrace
                 $this->timings->pull("tool:{$event->toolInvocationId}"),
                 microtime(true),
             ));
-        }, null, false);
+        });
     }
 
     public function handleAgentFailedOver(AgentFailedOver $event): void
@@ -77,6 +79,9 @@ readonly class ExportTrace
                 ? $event->exception->getMessage()
                 : '';
 
+            // AgentFailedOver carries no invocation id, so failovers are parked by
+            // agent class and attached to that class's next completed prompt. This
+            // assumes synchronous, non-interleaved invocations within one process.
             $this->timings->addFailover($event->agent::class, [
                 'provider' => class_basename($event->provider),
                 'model' => $event->model,
