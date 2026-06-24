@@ -2,27 +2,10 @@
 
 declare(strict_types=1);
 
+use AgentSoftware\LaravelAiCompanion\Tests\Support\FakeTraceExporter;
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
 use AgentSoftware\LaravelAiCompanion\Tracing\Jobs\ShipSpans;
 use Illuminate\Support\Facades\Log;
-
-class FakeTraceExporter implements TraceExporter
-{
-    /** @var array<int, array<int, array<string, mixed>>> */
-    public array $batches = [];
-
-    public bool $isEnabled = true;
-
-    public function enabled(): bool
-    {
-        return $this->isEnabled;
-    }
-
-    public function ship(array $spans): void
-    {
-        $this->batches[] = $spans;
-    }
-}
 
 it('hands its spans to the bound TraceExporter', function () {
     $fake = new FakeTraceExporter;
