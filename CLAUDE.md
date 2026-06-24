@@ -44,7 +44,7 @@ Hard-won API facts (verified 2026-06, cost us production failures — keep these
 - Metrics field names: `start`/`end` (unix epoch seconds, float), `prompt_tokens`, `completion_tokens`, `tokens`; extra numeric keys (cache/reasoning tokens) are allowed as custom metrics. Cost is derived from `metadata.model`.
 - `POST /v1/project {name}` is find-or-create; the project id is cached forever per name.
 - **Data planes**: some orgs (including ours, Street Group) are EU-pinned — inserts to the default `api.braintrust.dev` fail with `421 DataPlaneRedirectError`. Consuming apps must set `BRAINTRUST_API_URL=https://api-eu.braintrust.dev`. A future improvement could follow the 421's `RedirectUrl` automatically.
-- Scoring (LLM-as-a-judge, online scoring rules, datasets, experiments) happens entirely inside Braintrust — this package only ships spans. Do not add scoring code here.
+- The package provides generic eval contracts + offline experiment transport, but never defines what "good" means. `Eval/` owns the `Scorer`/`Score`/`EvalSubject` contracts and the `ExperimentExporter` (Braintrust experiment REST push). Concrete scorers, rubrics, datasets, the LLM-judge, and any online/live-span scoring live in the consuming app and implement the `Scorer` contract.
 
 ## Conventions
 
