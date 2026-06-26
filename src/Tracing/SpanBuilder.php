@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Tracing;
 
+use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\ToolInvoked;
@@ -22,23 +23,24 @@ class SpanBuilder
     {
         $rootId = $this->rootId();
         $usage = $event->response->usage;
+        $agent = $event->prompt->agent;
 
         return [
             'id' => $event->invocationId,
             'trace_id' => $rootId ?? $event->invocationId,
             'parent_id' => $rootId,
-            'name' => class_basename($event->prompt->agent),
+            'name' => class_basename($agent),
             'type' => 'llm',
             'input' => [
                 'prompt' => $event->prompt->prompt,
-                'instructions' => rescue(fn (): string => $event->prompt->agent->instructions(), null, false),
+                'instructions' => rescue(fn (): string => $agent->instructions(), null, false),
             ],
             'output' => $event->response instanceof StructuredAgentResponse
                 ? $event->response->toArray()
                 : $event->response->text,
             'error' => null,
-            'metadata' => array_merge($this->baseMetadata(), array_filter([
-                'agent' => $event->prompt->agent::class,
+            'metadata' => array_merge($this->baseMetadata(), $this->loggableProperties($agent), array_filter([
+                'agent' => $agent::class,
                 'model' => $event->response->meta->model ?? $event->prompt->model,
                 'provider' => $event->response->meta->provider,
                 'failovers' => $failovers !== [] ? $failovers : null,
@@ -123,6 +125,21 @@ class SpanBuilder
         }
 
         return Uuid::uuid5(Uuid::NAMESPACE_URL, "ai-companion:{$sourceModel}:{$sourceId}")->toString();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loggableProperties(object $agent): array
+    {
+        if (! $agent instanceof HasLoggableProperties) {
+            return [];
+        }
+
+        return array_filter(
+            $agent->loggableProperties(),
+            fn (mixed $value): bool => $value !== null,
+        );
     }
 
     /**

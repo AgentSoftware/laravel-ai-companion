@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\StubAgent;
 use AgentSoftware\LaravelAiCompanion\Tracing\SpanBuilder;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Context;
@@ -149,6 +151,49 @@ it('falls back to the prompt model when response meta has no provider or model',
 
     expect($span['metadata']['model'])->toBe('claude-haiku-4-5-20251001')
         ->and($span['metadata'])->not->toHaveKey('provider');
+});
+
+it('merges the agent loggable properties into span metadata', function () {
+    $agent = new class extends StubAgent implements HasLoggableProperties
+    {
+        public function loggableProperties(): array
+        {
+            return [
+                'content_item_id' => 'ci-1',
+                'campaign_id' => 'camp-1',
+                'user_id' => 'user-1',
+                'prompt_version' => 3,
+                'agent_group' => 'email-builder',
+                'focus_block_id' => null,
+            ];
+        }
+    };
+
+    $prompt = new AgentPrompt(
+        agent: $agent,
+        prompt: 'Hello',
+        attachments: [],
+        provider: Mockery::mock(TextProvider::class),
+        model: 'claude-haiku-4-5-20251001',
+        invocationId: 'inv-9',
+    );
+
+    $event = new AgentPrompted(invocationId: 'inv-9', prompt: $prompt, response: new AgentResponse(
+        invocationId: 'inv-9',
+        text: 'World',
+        usage: new Usage(promptTokens: 1, completionTokens: 1, cacheWriteInputTokens: 0, cacheReadInputTokens: 0),
+        meta: new Meta(provider: 'anthropic', model: 'claude-haiku-4-5-20251001'),
+    ));
+
+    $span = app(SpanBuilder::class)->agentSpan($event, 100.0, 101.0);
+
+    expect($span['metadata']['content_item_id'])->toBe('ci-1')
+        ->and($span['metadata']['campaign_id'])->toBe('camp-1')
+        ->and($span['metadata']['user_id'])->toBe('user-1')
+        ->and($span['metadata']['prompt_version'])->toBe(3)
+        ->and($span['metadata']['agent_group'])->toBe('email-builder')
+        ->and($span['metadata'])->not->toHaveKey('focus_block_id')
+        ->and($span['metadata']['agent'])->toBe($agent::class);
 });
 
 it('uses the structured array as span output for a StructuredAgentResponse', function () {
