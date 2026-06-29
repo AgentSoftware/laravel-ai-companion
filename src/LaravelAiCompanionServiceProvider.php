@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion;
 
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
-use AgentSoftware\LaravelAiCompanion\Eval\Exporters\BraintrustExperimentExporter;
+use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
-use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\BraintrustExporter;
+use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\TraceExporterManager;
 use AgentSoftware\LaravelAiCompanion\Tracing\Listeners\ExportTrace;
 use AgentSoftware\LaravelAiCompanion\Tracing\TraceTimings;
 use Illuminate\Console\Scheduling\Schedule;
@@ -36,9 +36,19 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
 
         $this->app->singleton(TraceTimings::class);
 
-        $this->app->bind(TraceExporter::class, BraintrustExporter::class);
+        $this->app->singleton(TraceExporterManager::class);
 
-        $this->app->bind(ExperimentExporter::class, BraintrustExperimentExporter::class);
+        $this->app->bind(
+            TraceExporter::class,
+            fn ($app): TraceExporter => $app->make(TraceExporterManager::class)->driver(),
+        );
+
+        $this->app->singleton(ExperimentExporterManager::class);
+
+        $this->app->bind(
+            ExperimentExporter::class,
+            fn ($app): ExperimentExporter => $app->make(ExperimentExporterManager::class)->driver(),
+        );
 
         if (config('ai-companion.braintrust.enabled')) {
             Event::subscribe(ExportTrace::class);

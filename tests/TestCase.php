@@ -6,6 +6,7 @@ namespace AgentSoftware\LaravelAiCompanion\Tests;
 
 use AgentSoftware\LaravelAiCompanion\LaravelAiCompanionServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Ai\AiServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
@@ -15,6 +16,7 @@ class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            AiServiceProvider::class,
             LaravelAiCompanionServiceProvider::class,
         ];
     }
