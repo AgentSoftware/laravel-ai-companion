@@ -1,9 +1,10 @@
 # Laravel AI Companion
 
-A companion package for the [Laravel AI SDK](https://laravel.com/docs/ai-sdk). Two capabilities in one install:
+A companion package for the [Laravel AI SDK](https://laravel.com/docs/ai-sdk). Three capabilities in one install:
 
 1. **Token usage tracking** — automatic, global. Every `AgentPrompted` event writes one row to `ai_token_usages`.
 2. **Response logging** — opt-in, per agent. Attach the `LogAiResponse` middleware to capture prompt/response/metadata to `ai_response_logs`.
+3. **Evaluations** — run an agent over a dataset, score each output, and push a Braintrust experiment (or scored NDJSON).
 
 ## Installation
 
@@ -151,13 +152,181 @@ With provider failover configured, a recovered failover ships one error span per
 
 ### Swapping the backend
 
-All spans flow through the `TraceExporter` contract. Rebind it in a service provider to switch to a different tracing backend:
+All spans flow through the `TraceExporter` driver (`braintrust` by default). Register another from your app and select it via config — no package change:
 
 ```php
-$this->app->bind(
-    \AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter::class,
-    MyCustomExporter::class,
-);
+use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\TraceExporterManager;
+
+app(TraceExporterManager::class)->extend('my-backend', fn (): TraceExporter => new MyCustomExporter);
+```
+
+```dotenv
+AI_COMPANION_TRACING_EXPORTER=my-backend
+```
+
+## Evaluations
+
+Run an AI agent over a dataset, score each output, and push a [Braintrust](https://www.braintrust.dev) experiment — or write scored NDJSON when no Braintrust key is set. The package owns the run loop, scoring, reporting, and export; your app provides the agents, datasets, and a thin harness.
+
+### Configure
+
+Point the `eval` block in `config/ai-companion.php` at your app's classes:
+
+```php
+'eval' => [
+    'exporter' => env('AI_COMPANION_EVAL_EXPORTER', 'braintrust'), // results driver
+    'harness'  => App\Eval\MyHarness::class,                       // boots a row's world
+    'targets'  => [App\Eval\SummaryTarget::class],                 // agents to evaluate
+    'judge'    => ['provider' => null, 'model' => null],           // LLM-judge override; null = cheapest
+    'output_path' => storage_path('app/braintrust'),              // NDJSON fallback dir
+],
+```
+
+### The harness
+
+The package never touches your models. Your harness boots a throwaway world for each dataset row and returns an `EvalEnvironment` (a marker your environment class implements). Each row runs inside a transaction that is rolled back, so an eval leaves no trace.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
+
+final readonly class MyEnvironment implements EvalEnvironment
+{
+    public function __construct(public User $user) {}
+}
+
+final class MyHarness implements EvalHarness
+{
+    public function boot(array $row): EvalEnvironment
+    {
+        return new MyEnvironment(User::factory()->create());
+    }
+
+    public function context(EvalEnvironment $environment): ?object
+    {
+        return null; // optional domain context for scorers to read
+    }
+
+    public function experimentMetadata(): array
+    {
+        return []; // experiment-level metadata, e.g. a config snapshot
+    }
+}
+```
+
+### Targets
+
+A target names the agent under test, its dataset, and the scorers that define "good". Register each in the `eval.targets` config array.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
+use Laravel\Ai\Contracts\Agent;
+
+final class SummaryTarget implements EvalTarget
+{
+    public function key(): string { return 'summary'; }                       // CLI arg + experiment prefix
+    public function label(): string { return 'Summary agent'; }
+    public function defaultDataset(): string { return 'tests/Fixtures/eval/summary.json'; }
+    public function promptInput(array $row): string { return $row['input']; }  // text sent to the agent
+
+    public function scorers(): array { return [/* see below */]; }
+
+    public function agent(EvalEnvironment $environment, array $row = []): Agent
+    {
+        return SummaryAgent::make();
+    }
+
+    public function subjectInput(array $row): array                            // extra fields scorers need
+    {
+        return ['expected' => $row['expected'] ?? null];
+    }
+}
+```
+
+### Scorers
+
+A scorer returns a `Score` in the range **0.0–1.0 where 1.0 = good** (the convention Braintrust and the result table assume — encapsulate any inverted polarity inside the scorer). Use the built-ins, or write your own.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\LlmJudgeScorer;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\MatchScorer;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\RangeScorer;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ToolRoutingScorer;
+
+public function scorers(): array
+{
+    return [
+        new RangeScorer(name: 'length', field: 'summary', mode: 'words', min: 10, max: 60),
+        new MatchScorer(name: 'topic', field: 'topic', expected: 'expected', mode: 'contains'),
+        new ToolRoutingScorer(declinePhrase: 'outside my capabilities'),
+        new LlmJudgeScorer(name: 'faithful', rubric: '10 = no invented facts …', input: 'input', output: 'summary'),
+    ];
+}
+```
+
+A custom deterministic scorer implements the `Scorer` contract — read `$subject->output` / `$subject->input`, return a `Score`:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\Scorer;
+use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
+use AgentSoftware\LaravelAiCompanion\Eval\Score;
+
+final class HasCtaScorer implements Scorer
+{
+    public function score(EvalSubject $subject): Score
+    {
+        $hasCta = filled($subject->output['cta'] ?? null);
+
+        return new Score('has_cta', $hasCta ? 1.0 : 0.0, ['cta' => $subject->output['cta'] ?? null]);
+    }
+}
+```
+
+`Score` metadata is free-form diagnostics; it is folded into the Braintrust event metadata (and shown on failures), so put the "why" there.
+
+### Datasets
+
+A dataset is a JSON array of rows. `promptInput()` / `subjectInput()` decide which keys are used; `tags` enable `--tag` filtering.
+
+```json
+[
+  { "input": "Summarise the Q3 report", "expected": "revenue", "tags": ["finance"] }
+]
+```
+
+### Running
+
+Add a thin command that extends `RunEvalCommand` and declares the signature (the base resolves targets and the harness from config):
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Commands\RunEvalCommand;
+use Illuminate\Console\Attributes\Signature;
+
+#[Signature('app:eval {target?} {--dataset=} {--out=} {--provider=} {--model=} {--tag=} {--limit=} {--trials=1}')]
+final class EvalCommand extends RunEvalCommand {}
+```
+
+```bash
+php artisan app:eval summary            # interactive picker if target omitted
+php artisan app:eval summary --limit=5  # smoke test the first 5 rows
+php artisan app:eval summary --trials=3 # run each row 3x to measure variance
+```
+
+You get a coloured score table per run. With a Braintrust key set it pushes an experiment named `summary/v{prompt}/{model}` and attaches git metadata so Braintrust auto-selects the previous run on your branch as the baseline. Without a key, scored NDJSON is written to `eval.output_path`.
+
+### Swapping the exporter
+
+Results flow through the `ExperimentExporter` driver (`braintrust` by default). Register another from your app — no package change — and select it via config:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
+
+app(ExperimentExporterManager::class)->extend('my-backend', fn (): ExperimentExporter => new MyExporter);
+```
+
+```dotenv
+AI_COMPANION_EVAL_EXPORTER=my-backend
 ```
 
 ## How it works

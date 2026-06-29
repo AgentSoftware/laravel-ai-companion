@@ -9,6 +9,12 @@ return [
         'prune_schedule' => env('AI_COMPANION_PRUNE_SCHEDULE', '0 3 * * *'),
     ],
 
+    'tracing' => [
+        // Trace exporter driver. Ships with 'braintrust'; register more on the
+        // TraceExporterManager (createXxxDriver / ::extend()).
+        'exporter' => env('AI_COMPANION_TRACING_EXPORTER', 'braintrust'),
+    ],
+
     'braintrust' => [
         'enabled' => env('AI_COMPANION_BRAINTRUST_ENABLED', false),
         'api_key' => env('BRAINTRUST_API_KEY'),
@@ -19,5 +25,23 @@ return [
             'connection' => env('AI_COMPANION_BRAINTRUST_QUEUE_CONNECTION'),
             'queue' => env('AI_COMPANION_BRAINTRUST_QUEUE'),
         ],
+    ],
+
+    'eval' => [
+        // Experiment exporter driver. Ships with 'braintrust'; register more on
+        // the ExperimentExporterManager (createXxxDriver / ::extend()).
+        'exporter' => env('AI_COMPANION_EVAL_EXPORTER', 'braintrust'),
+        // EvalHarness implementation that boots a throwaway world per dataset row.
+        'harness' => null,
+        // EvalTarget class names the run command can evaluate.
+        'targets' => [],
+        // LLM-judge provider/model overrides. Null uses the JudgeAgent default
+        // (cheapest Anthropic model).
+        'judge' => [
+            'provider' => env('AI_COMPANION_EVAL_JUDGE_PROVIDER'),
+            'model' => env('AI_COMPANION_EVAL_JUDGE_MODEL'),
+        ],
+        // Where scored NDJSON is written when no Braintrust key is set.
+        'output_path' => storage_path('app/braintrust'),
     ],
 ];

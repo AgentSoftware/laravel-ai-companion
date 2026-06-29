@@ -3,7 +3,12 @@
 declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
+use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetadata;
+use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetrics;
+use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\BraintrustExperimentExporter;
+use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
+use AgentSoftware\LaravelAiCompanion\Eval\Score;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -22,15 +27,18 @@ function fakeBraintrustExperimentApi(): void
     ]);
 }
 
-function experimentEvent(): array
+/**
+ * @param  array<int, Score>|null  $scores
+ */
+function experimentEvent(?array $scores = null): ExperimentEventData
 {
-    return [
-        'input' => ['brief' => 'Make it pop'],
-        'output' => ['blocks' => []],
-        'scores' => ['catalogue_valid' => 1.0, 'hydrates_clean' => 0.5],
-        'metadata' => ['prompt_version' => 3, 'tags' => ['terse']],
-        'metrics' => ['latency_ms' => 1200, 'tokens' => 900],
-    ];
+    return new ExperimentEventData(
+        input: ['brief' => 'Make it pop'],
+        output: ['blocks' => []],
+        scores: $scores ?? [new Score('catalogue_valid', 1.0), new Score('hydrates_clean', 0.5)],
+        metadata: new EvalRunMetadata(promptName: null, promptVersion: 3, model: null, provider: null, tags: ['terse']),
+        metrics: new EvalRunMetrics(latencyMs: 1200, promptTokens: 600, completionTokens: 300, tokens: 900),
+    );
 }
 
 it('is bound as the ExperimentExporter implementation', function () {
@@ -59,10 +67,10 @@ it('creates a fresh named experiment and inserts scored events into it', functio
 it('attaches git repo info so the backend can auto-select a baseline', function () {
     fakeBraintrustExperimentApi();
 
-    app(BraintrustExperimentExporter::class)->export('composer/v3/gemini/t0', [experimentEvent()], [], [
-        'branch' => 'feature/spd-2432',
-        'commit' => 'abc123',
-    ]);
+    app(BraintrustExperimentExporter::class)->export('composer/v3/gemini/t0', [experimentEvent()], [], new RepoInfo(
+        branch: 'feature/spd-2432',
+        commit: 'abc123',
+    ));
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/v1/experiment')
         && $request->data()['repo_info'] === ['branch' => 'feature/spd-2432', 'commit' => 'abc123']
@@ -95,16 +103,14 @@ it('attaches experiment-level metadata such as a catalogue snapshot', function (
             && $event['scores'] === ['catalogue_valid' => 1.0, 'hydrates_clean' => 0.5]
             && $event['input'] === ['brief' => 'Make it pop']
             && $event['metadata'] === ['prompt_version' => 3, 'tags' => ['terse']]
-            && $event['metrics'] === ['latency_ms' => 1200, 'tokens' => 900];
+            && $event['metrics'] === ['latency_ms' => 1200, 'prompt_tokens' => 600, 'completion_tokens' => 300, 'tokens' => 900];
     });
 });
 
-it('omits empty metrics and metadata that would serialize as json arrays', function () {
+it('folds per-score diagnostics into the event metadata so they are not lost', function () {
     fakeBraintrustExperimentApi();
 
-    $event = experimentEvent();
-    $event['metadata'] = [];
-    $event['metrics'] = [];
+    $event = experimentEvent([new Score('summarises_brief', 0.8, ['reasoning' => 'captures the topic'])]);
 
     app(BraintrustExperimentExporter::class)->export('composer/v3/gemini/t0', [$event]);
 
@@ -115,7 +121,8 @@ it('omits empty metrics and metadata that would serialize as json arrays', funct
 
         $event = $request->data()['events'][0];
 
-        return ! array_key_exists('metrics', $event) && ! array_key_exists('metadata', $event);
+        return $event['scores'] === ['summarises_brief' => 0.8]
+            && $event['metadata']['scores'] === ['summarises_brief' => ['reasoning' => 'captures the topic']];
     });
 });
 
