@@ -27,6 +27,18 @@ it('penalises an extra unexpected call with Jaccard', function (): void {
     expect($scorer->score($subject)->score)->toBe(0.5);
 });
 
+it('passes when no tool is expected', function (): void {
+    $scorer = new ToolRoutingScorer;
+
+    $score = $scorer->score(new EvalSubject(output: [], input: [
+        'tool_calls' => ['write_copy'],
+        'expects_tool' => [],
+    ]));
+
+    expect($score->score)->toBe(1.0)
+        ->and($score->metadata['note'])->toBe('no expected tool set');
+});
+
 it('scores a correct decline as 1.0 and a wrongful call as 0.0', function (): void {
     $scorer = new ToolRoutingScorer(declinePhrase: 'outside of my capabilities');
 

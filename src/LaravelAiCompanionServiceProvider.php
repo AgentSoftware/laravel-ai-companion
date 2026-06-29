@@ -13,6 +13,7 @@ use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\TraceExporterManager;
 use AgentSoftware\LaravelAiCompanion\Tracing\Listeners\ExportTrace;
 use AgentSoftware\LaravelAiCompanion\Tracing\TraceTimings;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Events\AgentPrompted;
 use Spatie\LaravelPackageTools\Package;
@@ -40,14 +41,14 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
 
         $this->app->bind(
             TraceExporter::class,
-            fn ($app): TraceExporter => $app->make(TraceExporterManager::class)->driver(),
+            fn (Application $app): TraceExporter => $app->make(TraceExporterManager::class)->driver(),
         );
 
         $this->app->singleton(ExperimentExporterManager::class);
 
         $this->app->bind(
             ExperimentExporter::class,
-            fn ($app): ExperimentExporter => $app->make(ExperimentExporterManager::class)->driver(),
+            fn (Application $app): ExperimentExporter => $app->make(ExperimentExporterManager::class)->driver(),
         );
 
         if (config('ai-companion.braintrust.enabled')) {

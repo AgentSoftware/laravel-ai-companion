@@ -13,6 +13,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetrics;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Evaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
+use AgentSoftware\LaravelAiCompanion\Eval\Score;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -204,7 +205,7 @@ abstract class RunEvalCommand extends Command
             return new ExperimentEventData(
                 input: ['input' => $input],
                 output: $output,
-                scores: collect($scores)->mapWithKeys(fn ($score): array => [$score->name => $score->score])->all(),
+                scores: collect($scores)->mapWithKeys(fn (Score $score): array => [$score->name => $score->score])->all(),
                 metadata: new EvalRunMetadata(
                     promptName: is_string($promptName) ? $promptName : null,
                     promptVersion: $this->scalarOrNull($loggable['prompt_version'] ?? null),
@@ -251,7 +252,7 @@ abstract class RunEvalCommand extends Command
 
         $rows = $events->map(fn (ExperimentEventData $event): array => [
             Str::limit((string) ($event->input['input'] ?? ''), 38),
-            ...$scoreNames->map(fn (string $name): string => $this->scoreCell($event->scores[$name] ?? null))->all(),
+            ...$scoreNames->map(fn (string $name): string => $this->scoreCell($event->scores[$name]))->all(),
             (string) $event->metrics->latencyMs,
             (string) $event->metrics->tokens,
         ])->all();
@@ -259,12 +260,8 @@ abstract class RunEvalCommand extends Command
         table($headers, $rows);
     }
 
-    private function scoreCell(?float $score): string
+    private function scoreCell(float $score): string
     {
-        if ($score === null) {
-            return '<fg=gray>—</>';
-        }
-
         $colour = match (true) {
             $score >= 0.8 => 'green',
             $score >= 0.5 => 'yellow',

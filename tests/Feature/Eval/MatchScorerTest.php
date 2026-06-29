@@ -29,3 +29,12 @@ it('scores list overlap with Jaccard', function (): void {
 
     expect($scorer->score($subject)->score)->toBe(2 / 3);
 });
+
+it('scores overlap as a pass when nothing is expected', function (): void {
+    $scorer = new MatchScorer(name: 'topics', field: 'topics', expected: 'expected', mode: 'overlap');
+
+    $score = $scorer->score(new EvalSubject(output: ['topics' => ['a']], input: ['expected' => []]));
+
+    expect($score->score)->toBe(1.0)
+        ->and($score->metadata['note'])->toBe('no expected values');
+});
