@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Contracts;
 
+use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
+use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
+
 interface ExperimentExporter
 {
     /**
@@ -16,9 +19,9 @@ interface ExperimentExporter
      *
      * Returns the backend experiment id.
      *
-     * @param  array<int, array<string, mixed>>  $events
+     * @param  array<int, ExperimentEventData>  $events
      * @param  array<string, mixed>  $metadata  Experiment-level metadata (e.g. a catalogue snapshot).
-     * @param  array<string, mixed>  $repoInfo  Git metadata (branch, commit, …) so the backend can auto-select a baseline.
+     * @param  RepoInfo|null  $repoInfo  Git metadata so the backend can auto-select a baseline.
      */
-    public function export(string $experiment, array $events, array $metadata = [], array $repoInfo = []): string;
+    public function export(string $experiment, array $events, array $metadata = [], ?RepoInfo $repoInfo = null): string;
 }

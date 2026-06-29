@@ -13,7 +13,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetrics;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Evaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
-use AgentSoftware\LaravelAiCompanion\Eval\Score;
+use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -100,18 +100,16 @@ abstract class RunEvalCommand extends Command
 
         $this->renderResults($events);
 
-        $payload = $events->map(fn (ExperimentEventData $event): array => $event->toArray())->all();
-
         if ($exporter->enabled()) {
             $experiment = $this->experimentName($target, $first);
-            $id = $exporter->export($experiment, $payload, $harness->experimentMetadata(), $this->repoInfo());
+            $id = $exporter->export($experiment, $events->all(), $harness->experimentMetadata(), $this->repoInfo());
 
             outro(sprintf('Pushed %d row(s) to Braintrust experiment "%s" (%s).', $events->count(), $experiment, $id));
 
             return self::SUCCESS;
         }
 
-        $this->writeNdjson($target, $payload);
+        $this->writeNdjson($target, $events->map(fn (ExperimentEventData $event): array => $event->toArray())->all());
 
         outro(sprintf('No Braintrust API key — wrote %d row(s) to %s', $events->count(), $this->outPath($target)));
 
@@ -205,7 +203,7 @@ abstract class RunEvalCommand extends Command
             return new ExperimentEventData(
                 input: ['input' => $input],
                 output: $output,
-                scores: collect($scores)->mapWithKeys(fn (Score $score): array => [$score->name => $score->score])->all(),
+                scores: $scores,
                 metadata: new EvalRunMetadata(
                     promptName: is_string($promptName) ? $promptName : null,
                     promptVersion: $this->scalarOrNull($loggable['prompt_version'] ?? null),
@@ -219,6 +217,7 @@ abstract class RunEvalCommand extends Command
                     completionTokens: $usage->completionTokens,
                     tokens: $usage->promptTokens + $usage->completionTokens,
                 ),
+                expected: is_array($row['expected'] ?? null) ? $row['expected'] : null,
             );
         } catch (Throwable $exception) {
             $this->failures[] = sprintf('%s — %s', Str::limit($input, 40), $exception->getMessage());
@@ -241,7 +240,7 @@ abstract class RunEvalCommand extends Command
      */
     private function renderResults(Collection $events): void
     {
-        $scoreNames = $events->flatMap(fn (ExperimentEventData $event): array => array_keys($event->scores))->unique()->values();
+        $scoreNames = $events->flatMap(fn (ExperimentEventData $event): array => array_keys($event->scoreValues()))->unique()->values();
 
         $headers = [
             'Input',
@@ -250,12 +249,16 @@ abstract class RunEvalCommand extends Command
             'tokens',
         ];
 
-        $rows = $events->map(fn (ExperimentEventData $event): array => [
-            Str::limit((string) ($event->input['input'] ?? ''), 38),
-            ...$scoreNames->map(fn (string $name): string => $this->scoreCell($event->scores[$name]))->all(),
-            (string) $event->metrics->latencyMs,
-            (string) $event->metrics->tokens,
-        ])->all();
+        $rows = $events->map(function (ExperimentEventData $event) use ($scoreNames): array {
+            $values = $event->scoreValues();
+
+            return [
+                Str::limit((string) ($event->input['input'] ?? ''), 38),
+                ...$scoreNames->map(fn (string $name): string => $this->scoreCell($values[$name]))->all(),
+                (string) $event->metrics->latencyMs,
+                (string) $event->metrics->tokens,
+            ];
+        })->all();
 
         table($headers, $rows);
     }
@@ -298,18 +301,16 @@ abstract class RunEvalCommand extends Command
 
     /**
      * Git metadata so Braintrust can auto-select the previous run on this branch
-     * as the comparison baseline. Empty when not in a git repo.
-     *
-     * @return array<string, mixed>
+     * as the comparison baseline. Fields are null when not in a git repo.
      */
-    private function repoInfo(): array
+    private function repoInfo(): RepoInfo
     {
-        return array_filter([
-            'branch' => $this->git('rev-parse --abbrev-ref HEAD'),
-            'commit' => $this->git('rev-parse HEAD'),
-            'commit_message' => $this->git('log -1 --pretty=%s'),
-            'dirty' => $this->gitDirty(),
-        ], fn (mixed $value): bool => $value !== null);
+        return new RepoInfo(
+            branch: $this->git('rev-parse --abbrev-ref HEAD'),
+            commit: $this->git('rev-parse HEAD'),
+            commitMessage: $this->git('log -1 --pretty=%s'),
+            dirty: $this->gitDirty(),
+        );
     }
 
     private function git(string $args): ?string

@@ -14,15 +14,14 @@ interface EvalHarness
      *
      * @param  array<string, mixed>  $row
      */
-    public function boot(array $row): object;
+    public function boot(array $row): EvalEnvironment;
 
     /**
      * Scorer context threaded into the eval subject for this environment (e.g.
-     * the block catalogue and brand a scorer needs to reason about the output).
-     *
-     * @return array<string, mixed>
+     * the block catalogue and brand a scorer needs to reason about the output),
+     * or null when scorers need no domain context.
      */
-    public function context(object $environment): array;
+    public function context(EvalEnvironment $environment): ?object;
 
     /**
      * Experiment-level metadata recorded against the whole run (e.g. a catalogue

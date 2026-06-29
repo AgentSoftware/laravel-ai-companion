@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Tests\Support\Eval;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
 use Laravel\Ai\Contracts\Agent;
 use RuntimeException;
@@ -35,7 +36,7 @@ class ThrowStubTarget implements EvalTarget
         return [new FixedScorer('routing', 1.0)];
     }
 
-    public function agent(object $environment, array $row = []): Agent
+    public function agent(EvalEnvironment $environment, array $row = []): Agent
     {
         throw new RuntimeException('boom');
     }

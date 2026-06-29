@@ -4,18 +4,19 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Tests\Support\Eval;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 
 class StubHarness implements EvalHarness
 {
-    public function boot(array $row): object
+    public function boot(array $row): EvalEnvironment
     {
-        return (object) ['row' => $row];
+        return new StubEnvironment;
     }
 
-    public function context(object $environment): array
+    public function context(EvalEnvironment $environment): ?object
     {
-        return ['stub' => $environment];
+        return null;
     }
 
     public function experimentMetadata(): array

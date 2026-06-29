@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Tests\Support\Eval;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
 use Laravel\Ai\Contracts\Agent;
 
@@ -38,7 +39,7 @@ class StructuredStubTarget implements EvalTarget
         ];
     }
 
-    public function agent(object $environment, array $row = []): Agent
+    public function agent(EvalEnvironment $environment, array $row = []): Agent
     {
         return StructuredStubAgent::make();
     }

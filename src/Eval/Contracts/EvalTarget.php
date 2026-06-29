@@ -47,7 +47,7 @@ interface EvalTarget
      *
      * @param  array<string, mixed>  $row
      */
-    public function agent(object $environment, array $row = []): Agent;
+    public function agent(EvalEnvironment $environment, array $row = []): Agent;
 
     /**
      * Per-row context threaded into the eval subject's input (e.g. the outliner's

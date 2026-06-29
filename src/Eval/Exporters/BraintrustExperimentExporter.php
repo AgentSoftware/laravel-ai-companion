@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion\Eval\Exporters;
 
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
+use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
+use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -16,8 +18,10 @@ class BraintrustExperimentExporter implements ExperimentExporter
         return filled(config('ai-companion.braintrust.api_key'));
     }
 
-    public function export(string $experiment, array $events, array $metadata = [], array $repoInfo = []): string
+    public function export(string $experiment, array $events, array $metadata = [], ?RepoInfo $repoInfo = null): string
     {
+        $repo = $repoInfo?->toArray() ?? [];
+
         $experimentId = (string) $this->client()
             ->post('/v1/experiment', array_filter([
                 'project_id' => $this->projectId(),
@@ -26,7 +30,7 @@ class BraintrustExperimentExporter implements ExperimentExporter
                 // comparable record rather than appending to the last one.
                 'ensure_new' => true,
                 'metadata' => $metadata !== [] ? $metadata : null,
-                'repo_info' => $repoInfo !== [] ? $repoInfo : null,
+                'repo_info' => $repo !== [] ? $repo : null,
             ], fn (mixed $value): bool => $value !== null))
             ->throw()
             ->json('id');
@@ -41,22 +45,25 @@ class BraintrustExperimentExporter implements ExperimentExporter
     }
 
     /**
-     * @param  array<string, mixed>  $event
      * @return array<string, mixed>
      */
-    private function toExperimentEvent(array $event): array
+    private function toExperimentEvent(ExperimentEventData $event): array
     {
-        // Braintrust requires metadata and metrics to be json objects, but an
-        // empty PHP array encodes to a json array — omit them when empty.
-        $metrics = array_filter($event['metrics'] ?? [], fn (mixed $value): bool => $value !== null);
+        // Fold each scorer's diagnostics (judge reasoning, violations, …) into the
+        // event metadata so it is not lost — the scores field carries only numbers.
+        $scoreMetadata = $event->scoreMetadata();
+        $metadata = array_filter([
+            ...$event->metadata->toArray(),
+            'scores' => $scoreMetadata !== [] ? $scoreMetadata : null,
+        ], fn (mixed $value): bool => $value !== null);
 
         return array_filter([
-            'input' => $event['input'] ?? null,
-            'output' => $event['output'] ?? null,
-            'scores' => $event['scores'] ?? null,
-            'expected' => $event['expected'] ?? null,
-            'metadata' => ($event['metadata'] ?? []) !== [] ? $event['metadata'] : null,
-            'metrics' => $metrics !== [] ? $metrics : null,
+            'input' => $event->input,
+            'output' => $event->output,
+            'scores' => $event->scoreValues(),
+            'expected' => $event->expected,
+            'metadata' => $metadata !== [] ? $metadata : null,
+            'metrics' => $event->metrics->toArray(),
         ], fn (mixed $value): bool => $value !== null);
     }
 

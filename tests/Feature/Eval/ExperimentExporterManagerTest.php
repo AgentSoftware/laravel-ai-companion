@@ -5,6 +5,7 @@ declare(strict_types=1);
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\BraintrustExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
+use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
 
 it('resolves the braintrust driver by default', function (): void {
     expect(app(ExperimentExporter::class))->toBeInstanceOf(BraintrustExperimentExporter::class);
@@ -24,7 +25,7 @@ it('lets the host app register a custom driver', function (): void {
             return true;
         }
 
-        public function export(string $experiment, array $events, array $metadata = [], array $repoInfo = []): string
+        public function export(string $experiment, array $events, array $metadata = [], ?RepoInfo $repoInfo = null): string
         {
             return 'custom';
         }
