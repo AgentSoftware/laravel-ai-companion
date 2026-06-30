@@ -8,6 +8,7 @@ use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetadata;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetrics;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
@@ -174,8 +175,12 @@ abstract class RunEvalCommand extends Command
 
             $agent = $target->agent($environment, $row);
 
+            $attachments = $target instanceof HasPromptAttachments
+                ? $target->promptAttachments($row)
+                : [];
+
             $startedAt = microtime(true);
-            $response = $agent->prompt($input, [], $this->option('provider'), $this->option('model'));
+            $response = $agent->prompt($input, $attachments, $this->option('provider'), $this->option('model'));
             $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
 
             $meta = $response->meta;
