@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\AttachmentStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StructuredStubAgent;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StructuredStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StubEvalCommand;
@@ -113,6 +114,21 @@ it('captures tool calls and reply text for a text target', function (): void {
     expect($row['output']['tool_calls'])->toContain('FooTool')
         ->and((float) $row['scores']['routing'])->toBe(1.0)
         ->and($row['metadata']['prompt_version'])->toBeNull();
+
+    File::delete($out);
+});
+
+it('passes a target\'s attachments through to the agent', function (): void {
+    config()->set('ai-companion.eval.targets', [AttachmentStubTarget::class]);
+
+    TextStubAgent::fake(['captioned']);
+    writeEvalDataset([['brief' => 'caption this image']]);
+
+    $out = sys_get_temp_dir().'/stub-attach.ndjson';
+
+    $this->artisan('stub:eval', ['target' => 'stub-attach', '--out' => $out])->assertSuccessful();
+
+    TextStubAgent::assertPrompted(fn ($prompt): bool => $prompt->attachments->count() === 1);
 
     File::delete($out);
 });
