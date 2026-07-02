@@ -118,14 +118,8 @@ class ScaffoldEvalCommand extends Command
 
     private function appNamespace(): string
     {
-        try {
-            return app()->getNamespace();
-            // @codeCoverageIgnoreStart — defensive fallback for apps whose
-            // composer.json has no autoloaded app namespace.
-        } catch (Throwable) {
-            return 'App\\';
-        }
-        // @codeCoverageIgnoreEnd
+        // Falls back for apps whose composer.json has no autoloaded app namespace.
+        return rescue(fn (): string => app()->getNamespace(), 'App\\', false);
     }
 
     private function buildDataset(string $agentClass, string $datasetPath): bool

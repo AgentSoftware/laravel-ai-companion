@@ -11,6 +11,7 @@ final class ScalarDefaultsFixtureAgent extends StubAgent
     public function __construct(
         public float $temperature,
         public bool $verbose,
+        public int $retries,
         mixed $untyped,
     ) {}
 }

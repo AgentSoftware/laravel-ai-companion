@@ -80,5 +80,6 @@ it('falls back to cast-based defaults for scalar params without a default and a 
 
     expect($code)->toContain("temperature: (float) (\$row['temperature'] ?? 0.0)")
         ->and($code)->toContain("verbose: (bool) (\$row['verbose'] ?? false)")
+        ->and($code)->toContain("retries: (int) (\$row['retries'] ?? 0)")
         ->and($code)->toContain("untyped: \$row['untyped'] ?? null /* TODO: map from a dataset row key */");
 });
