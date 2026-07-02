@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScaffoldEvalCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
@@ -26,6 +27,7 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
+            ->hasCommand(ScaffoldEvalCommand::class)
             ->discoversMigrations();
     }
 

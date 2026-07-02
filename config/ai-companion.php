@@ -43,5 +43,10 @@ return [
         ],
         // Where scored NDJSON is written when no Braintrust key is set.
         'output_path' => storage_path('app/braintrust'),
+        // Where the scaffold command looks for Agent implementations.
+        'scaffold' => [
+            'agent_path' => null,      // defaults to app_path() at runtime
+            'agent_namespace' => null, // defaults to the app namespace at runtime
+        ],
     ],
 ];
