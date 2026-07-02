@@ -243,7 +243,12 @@ class ScaffoldEvalCommand extends Command
             };
         }
 
-        $custom = text(label: 'Custom scorer class names (comma-separated, blank for none)', default: '');
+        $custom = text(
+            label: 'Custom scorer class names (comma-separated, blank for none)',
+            placeholder: 'e.g. NoHallucinatedUrlsScorer, ValidSlugsScorer',
+            hint: 'Custom scorers are agent-specific pass/fail checks the built-ins can\'t cover. Each name becomes an empty class in app/Ai/Eval/Scorers/ for you to implement, already wired into this eval. Press enter to skip.',
+            default: '',
+        );
 
         foreach (array_filter(array_map(trim(...), explode(',', $custom))) as $name) {
             $class = Str::studly($name);
