@@ -25,10 +25,13 @@ class BraintrustApi
             ->get('/v1/dataset', ['project_id' => $this->projectId(), 'limit' => 100]))
             ->json('objects', []);
 
-        return array_values(array_map(fn (array $dataset): array => [
-            'id' => (string) $dataset['id'],
-            'name' => (string) $dataset['name'],
-        ], $objects));
+        return collect($objects)
+            ->map(fn (array $dataset): array => [
+                'id' => (string) $dataset['id'],
+                'name' => (string) $dataset['name'],
+            ])
+            ->values()
+            ->all();
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -86,7 +89,7 @@ class BraintrustApi
         }
 
         if ($includeMetadata && is_array($event['metadata'] ?? null)) {
-            $row += array_filter($event['metadata'], fn (mixed $value): bool => is_scalar($value));
+            $row += collect($event['metadata'])->filter(fn (mixed $value): bool => is_scalar($value))->all();
         }
 
         return $row;
@@ -125,6 +128,8 @@ class BraintrustApi
     private function client(): PendingRequest
     {
         return Http::baseUrl((string) config('ai-companion.braintrust.api_url'))
-            ->withToken((string) config('ai-companion.braintrust.api_key'));
+            ->withToken((string) config('ai-companion.braintrust.api_key'))
+            ->connectTimeout(5)
+            ->timeout(30);
     }
 }

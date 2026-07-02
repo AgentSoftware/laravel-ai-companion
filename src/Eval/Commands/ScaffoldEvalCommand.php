@@ -96,30 +96,27 @@ class ScaffoldEvalCommand extends Command
      */
     private function agentOptions(array $agents, string $value): array
     {
-        $matches = array_filter(
-            $agents,
-            fn (string $class): bool => $value === '' || Str::contains($class, $value, ignoreCase: true),
-        );
+        $basenames = collect($agents)->countBy(class_basename(...));
 
-        $basenames = array_count_values(array_map(class_basename(...), $agents));
-
-        $options = [];
-
-        foreach ($matches as $class) {
-            $basename = class_basename($class);
-
-            $options[$class] = $basenames[$basename] > 1
-                ? sprintf('%s (%s)', $basename, Str::beforeLast($class, '\\'))
-                : $basename;
-        }
-
-        return $options;
+        return collect($agents)
+            ->filter(fn (string $class): bool => $value === '' || Str::contains($class, $value, ignoreCase: true))
+            ->mapWithKeys(fn (string $class): array => [
+                $class => $basenames[class_basename($class)] > 1
+                    ? sprintf('%s (%s)', class_basename($class), Str::beforeLast($class, '\\'))
+                    : class_basename($class),
+            ])
+            ->all();
     }
 
     private function appNamespace(): string
     {
         // Falls back for apps whose composer.json has no autoloaded app namespace.
-        return rescue(fn (): string => app()->getNamespace(), 'App\\', false);
+        return rescue(fn (): string => app()->getNamespace(), 'App\\', report: false);
+    }
+
+    private function appEvalNamespace(string $suffix): string
+    {
+        return trim($this->appNamespace(), '\\').'\\Ai\\Eval\\'.$suffix;
     }
 
     private function buildDataset(string $agentClass, string $datasetPath): bool
@@ -303,9 +300,9 @@ class ScaffoldEvalCommand extends Command
             default: '',
         );
 
-        foreach (array_filter(array_map(trim(...), explode(',', $custom))) as $name) {
+        foreach (Str::of($custom)->explode(',')->map(fn (string $name): string => trim($name))->filter() as $name) {
             $class = Str::studly($name);
-            $namespace = trim($this->appNamespace(), '\\').'\\Ai\\Eval\\Scorers';
+            $namespace = $this->appEvalNamespace('Scorers');
             $path = app_path("Ai/Eval/Scorers/{$class}.php");
 
             if (! File::exists($path) || confirm("Overwrite existing {$class}?", default: false)) {
@@ -324,7 +321,7 @@ class ScaffoldEvalCommand extends Command
     private function writeTarget(string $agentClass, string $key, string $label, string $datasetPath, array $scorers): bool
     {
         $class = class_basename($agentClass).'EvalTarget';
-        $namespace = trim($this->appNamespace(), '\\').'\\Ai\\Eval\\Targets';
+        $namespace = $this->appEvalNamespace('Targets');
         $path = app_path("Ai/Eval/Targets/{$class}.php");
 
         if (File::exists($path) && ! confirm("Overwrite existing {$class}?", default: false)) {

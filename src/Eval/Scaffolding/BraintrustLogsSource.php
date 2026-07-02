@@ -13,9 +13,9 @@ final readonly class BraintrustLogsSource implements DatasetSource
 
     public function fetch(int $limit, bool $includeExpected, bool $includeMetadata): array
     {
-        return array_values(array_map(
-            fn (array $event): array => BraintrustApi::toRow($event, $includeExpected, $includeMetadata),
-            $this->api->logEvents($limit, $this->agentName),
-        ));
+        return collect($this->api->logEvents($limit, $this->agentName))
+            ->map(fn (array $event): array => BraintrustApi::toRow($event, $includeExpected, $includeMetadata))
+            ->values()
+            ->all();
     }
 }

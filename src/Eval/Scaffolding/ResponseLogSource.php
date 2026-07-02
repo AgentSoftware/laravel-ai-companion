@@ -26,10 +26,10 @@ final readonly class ResponseLogSource implements DatasetSource
                 }
 
                 if ($includeMetadata) {
-                    $row += array_filter(
-                        [...($log->metadata ?? []), ...($log->properties ?? [])],
-                        fn (mixed $value): bool => is_scalar($value),
-                    );
+                    $row += collect($log->metadata ?? [])
+                        ->merge($log->properties ?? [])
+                        ->filter(fn (mixed $value): bool => is_scalar($value))
+                        ->all();
                 }
 
                 return $row;
