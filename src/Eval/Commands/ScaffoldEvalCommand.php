@@ -28,6 +28,7 @@ use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\multiselect;
 use function Laravel\Prompts\outro;
+use function Laravel\Prompts\search;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\text;
 
@@ -54,7 +55,12 @@ class ScaffoldEvalCommand extends Command
             return self::FAILURE;
         }
 
-        $agentClass = select(label: 'Which agent is this eval for?', options: array_combine($agents, $agents), scroll: 10);
+        $agentClass = (string) search(
+            label: 'Which agent is this eval for?',
+            options: fn (string $value): array => $this->agentOptions($agents, $value),
+            placeholder: 'Start typing an agent name…',
+            scroll: 10,
+        );
 
         $defaultKey = Str::of(class_basename($agentClass))->beforeLast('Agent')->kebab()->toString();
         $key = text(label: 'Eval key', default: $defaultKey, required: true);
@@ -68,6 +74,35 @@ class ScaffoldEvalCommand extends Command
         $scorers = $this->askScorers();
 
         return $this->writeTarget($agentClass, $key, $label, $datasetPath, $scorers) ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Agent picker options: short class names, filtered by the typed search
+     * term. Namespaces only appear when two agents share a basename.
+     *
+     * @param  array<int, string>  $agents
+     * @return array<string, string>
+     */
+    private function agentOptions(array $agents, string $value): array
+    {
+        $matches = array_filter(
+            $agents,
+            fn (string $class): bool => $value === '' || Str::contains($class, $value, ignoreCase: true),
+        );
+
+        $basenames = array_count_values(array_map(class_basename(...), $agents));
+
+        $options = [];
+
+        foreach ($matches as $class) {
+            $basename = class_basename($class);
+
+            $options[$class] = $basenames[$basename] > 1
+                ? sprintf('%s (%s)', $basename, Str::beforeLast($class, '\\'))
+                : $basename;
+        }
+
+        return $options;
     }
 
     private function appNamespace(): string

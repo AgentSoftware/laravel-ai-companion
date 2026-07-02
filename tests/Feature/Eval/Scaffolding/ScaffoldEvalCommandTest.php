@@ -25,6 +25,8 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
     config()->set('ai-companion.eval.scaffold.agent_namespace', 'AgentSoftware\\LaravelAiCompanion\\Tests\\Support\\');
 
     $this->artisan('ai:eval:scaffold')
+        // search() falls back to two questions in tests: the term, then the pick.
+        ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
         ->expectsQuestion('Eval label', 'Fixture Agent')
