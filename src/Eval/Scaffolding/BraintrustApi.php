@@ -39,12 +39,28 @@ class BraintrustApi
             ->json('events', []);
     }
 
-    /** @return array<int, array<string, mixed>> */
-    public function logEvents(int $limit): array
+    /**
+     * Recent LLM spans from the project logs, newest first, optionally filtered
+     * to one agent. Filtering happens server-side via BTQL — the plain fetch
+     * endpoint has no filter, and a busy project's most recent events are
+     * mostly tool spans, so fetch-then-filter finds nothing.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function logEvents(int $limit, ?string $agentName = null): array
     {
+        $filter = "span_attributes.type = 'llm'";
+
+        if ($agentName !== null) {
+            $escaped = str_replace("'", "''", $agentName);
+            $filter .= " and span_attributes.name ILIKE '%{$escaped}%'";
+        }
+
+        $query = "select: * from: project_logs('{$this->projectId()}') filter: {$filter} sort: created desc limit: {$limit}";
+
         return (array) $this->request(fn (): Response => $this->client()
-            ->post("/v1/project_logs/{$this->projectId()}/fetch", ['limit' => $limit]))
-            ->json('events', []);
+            ->post('/btql', ['query' => $query, 'fmt' => 'json']))
+            ->json('data', []);
     }
 
     /**
