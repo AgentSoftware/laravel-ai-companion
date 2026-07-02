@@ -59,12 +59,23 @@ class ScaffoldEvalCommand extends Command
             label: 'Which agent is this eval for?',
             options: fn (string $value): array => $this->agentOptions($agents, $value),
             placeholder: 'Start typing an agent name…',
+            hint: 'This agent will be run against every dataset row and its answers scored.',
             scroll: 10,
         );
 
         $defaultKey = Str::of(class_basename($agentClass))->beforeLast('Agent')->kebab()->toString();
-        $key = text(label: 'Eval key', default: $defaultKey, required: true);
-        $label = text(label: 'Eval label', default: Str::headline($defaultKey), required: true);
+        $key = text(
+            label: 'Eval key',
+            default: $defaultKey,
+            required: true,
+            hint: 'Short id for this eval — used in the dataset filename and to run it: php artisan ai:eval <key>. The default is fine.',
+        );
+        $label = text(
+            label: 'Eval label',
+            default: Str::headline($defaultKey),
+            required: true,
+            hint: 'Human-friendly name shown in pickers and result banners. The default is fine.',
+        );
         $datasetPath = "database/eval-datasets/{$key}.json";
 
         if (! $this->buildDataset($agentClass, $datasetPath)) {
@@ -116,12 +127,16 @@ class ScaffoldEvalCommand extends Command
 
     private function buildDataset(string $agentClass, string $datasetPath): bool
     {
-        $source = select(label: 'Where should the dataset come from?', options: [
-            'braintrust_dataset' => 'Existing Braintrust dataset',
-            'braintrust_logs' => 'Recent Braintrust logs',
-            'response_logs' => 'ai_response_logs table',
-            'skip' => 'Skip — dataset file already exists',
-        ]);
+        $source = select(
+            label: 'Where should the test data come from?',
+            options: [
+                'braintrust_dataset' => 'A dataset you already curated in Braintrust',
+                'braintrust_logs' => 'Recent production traffic logged to Braintrust (most common)',
+                'response_logs' => 'The ai_response_logs database table (if you use the LogAiResponse middleware)',
+                'skip' => 'Nowhere — I already have a dataset JSON file',
+            ],
+            hint: 'The eval replays real past prompts through the agent and scores the answers. This picks where those past prompts are pulled from.',
+        );
 
         if ($source === 'skip') {
             return true;
@@ -140,7 +155,12 @@ class ScaffoldEvalCommand extends Command
                 return false;
             }
 
-            $limit = (int) text(label: 'How many rows?', default: '50', required: true);
+            $limit = (int) text(
+                label: 'How many past interactions should the dataset hold?',
+                default: '50',
+                required: true,
+                hint: 'Each one becomes a test case: one agent call (real cost + time) per eval run. 10–20 is plenty to start; you can delete rows from the JSON later.',
+            );
 
             $fields = multiselect(
                 label: 'Each row always gets the prompt. What else should it keep?',
@@ -207,6 +227,7 @@ class ScaffoldEvalCommand extends Command
         $id = select(
             label: 'Which Braintrust dataset?',
             options: collect($datasets)->mapWithKeys(fn (array $d): array => [$d['id'] => $d['name']])->all(),
+            hint: 'Datasets from your Braintrust project — its rows will be copied into the local JSON file.',
         );
 
         return new BraintrustDatasetSource($api, (string) $id);
@@ -215,12 +236,16 @@ class ScaffoldEvalCommand extends Command
     /** @return array<int, ScorerEntry> */
     private function askScorers(): array
     {
-        $builtins = multiselect(label: 'Built-in scorers', options: [
-            'match' => 'MatchScorer',
-            'llm_judge' => 'LlmJudgeScorer',
-            'range' => 'RangeScorer',
-            'tool_routing' => 'ToolRoutingScorer',
-        ]);
+        $builtins = multiselect(
+            label: 'Which built-in scorers should judge the answers?',
+            options: [
+                'match' => 'MatchScorer — checks a field of the answer equals an expected value',
+                'llm_judge' => 'LlmJudgeScorer — an LLM grades each answer against a rubric you write (most flexible)',
+                'range' => 'RangeScorer — checks a field\'s length/count falls inside min–max bounds',
+                'tool_routing' => 'ToolRoutingScorer — checks the agent called the tools the row expected',
+            ],
+            hint: 'Scorers give each answer a 0–1 score. Space toggles, enter confirms; pick none if you only want custom scorers.',
+        );
 
         $entries = [];
 
@@ -229,8 +254,18 @@ class ScaffoldEvalCommand extends Command
                 'llm_judge' => new ScorerEntry(
                     code: sprintf(
                         'new LlmJudgeScorer(name: %s, rubric: %s)',
-                        var_export(text(label: 'LLM judge name', default: 'quality', required: true), true),
-                        var_export(text(label: 'LLM judge rubric', required: true), true),
+                        var_export(text(
+                            label: 'LLM judge name',
+                            default: 'quality',
+                            required: true,
+                            hint: 'The score\'s column name in results, e.g. "quality" or "on_brand".',
+                        ), true),
+                        var_export(text(
+                            label: 'LLM judge rubric',
+                            required: true,
+                            placeholder: 'e.g. Every page slug in the answer must come from the input list, grouped logically.',
+                            hint: 'Plain-English marking criteria — tell the judge what a 10/10 answer looks like for this agent.',
+                        ), true),
                     ),
                     imports: [LlmJudgeScorer::class],
                 ),
