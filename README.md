@@ -315,6 +315,29 @@ php artisan app:eval summary --trials=3 # run each row 3x to measure variance
 
 You get a coloured score table per run. With a Braintrust key set it pushes an experiment named `summary/v{prompt}/{model}` and attaches git metadata so Braintrust auto-selects the previous run on your branch as the baseline. Without a key, scored NDJSON is written to `eval.output_path`.
 
+### Scaffolding an eval
+
+Run the interactive wizard to go from historical traffic to a runnable eval:
+
+```bash
+php artisan ai:scaffold-eval
+```
+
+It will:
+
+1. Discover your `Agent` classes and let you pick one.
+2. Pull rows from an existing Braintrust dataset, recent Braintrust logs, or the
+   `ai_response_logs` table into `database/eval-datasets/<key>.json`
+   (`{"prompt": ..., "expected": ..., ...metadata}`).
+3. Let you pick built-in scorers (the LLM-judge rubric is asked for inline) and
+   generate TODO stubs for custom ones in `app/Ai/Eval/Scorers/`.
+4. Generate `app/Ai/Eval/Targets/<Agent>EvalTarget.php` with the agent's
+   constructor parameters mapped from dataset row keys.
+
+Finish by registering the target in `config/ai-companion.php` under
+`eval.targets`. EU-pinned Braintrust orgs must set
+`BRAINTRUST_API_URL=https://api-eu.braintrust.dev`.
+
 ### Swapping the exporter
 
 Results flow through the `ExperimentExporter` driver (`braintrust` by default). Register another from your app — no package change — and select it via config:
