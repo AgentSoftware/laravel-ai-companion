@@ -288,11 +288,10 @@ class ScaffoldEvalCommand extends Command
             hint: 'Scorers give each answer a 0–1 score. Space toggles, enter confirms; pick none if you only want custom scorers.',
         );
 
-        $entries = [];
-
-        foreach ($builtins as $builtin) {
-            $entries[] = $this->scorerEntryFor((string) $builtin);
-        }
+        // Built-in entries first: LlmJudgeScorer prompts for its rubric here,
+        // so this must run before the custom-names question to keep prompt order.
+        $builtinEntries = collect($builtins)
+            ->map(fn (int|string $builtin): ScorerEntry => $this->scorerEntryFor((string) $builtin));
 
         $custom = text(
             label: 'Custom scorer class names (comma-separated, blank for none)',
@@ -301,36 +300,36 @@ class ScaffoldEvalCommand extends Command
             default: '',
         );
 
-        $namespace = $this->appEvalNamespace('Scorers');
-
-        $classes = Str::of($custom)
+        // A name the generator can't turn into a valid class would render an
+        // app file that fails to parse — skip those with a warning.
+        [$valid, $invalid] = Str::of($custom)
             ->explode(',')
             ->map(fn (string $name): string => Str::studly(trim($name)))
             ->filter()
-            ->unique();
+            ->unique()
+            ->partition(fn (string $class): bool => (bool) preg_match('/^[A-Z][A-Za-z0-9]*$/', $class));
 
-        foreach ($classes as $class) {
-            // A name the generator can't turn into a valid class would render
-            // an app file that fails to parse — skip it instead.
-            if (! preg_match('/^[A-Z][A-Za-z0-9]*$/', $class)) {
-                warning("Skipping \"{$class}\" — not a valid class name.");
+        $invalid->each(fn (string $class) => warning("Skipping \"{$class}\" — not a valid class name."));
 
-                continue;
-            }
+        return $builtinEntries
+            ->merge($valid->map($this->customScorerEntry(...)))
+            ->values()
+            ->all();
+    }
 
-            $path = app_path("Ai/Eval/Scorers/{$class}.php");
-            $exists = File::exists($path);
+    private function customScorerEntry(string $class): ScorerEntry
+    {
+        $namespace = $this->appEvalNamespace('Scorers');
+        $path = app_path("Ai/Eval/Scorers/{$class}.php");
+        $exists = File::exists($path);
 
-            if (! $exists || confirm("Overwrite existing {$class}?", default: false)) {
-                File::ensureDirectoryExists(dirname($path));
-                File::put($path, new ScorerGenerator()->generate($namespace, $class));
-                info(($exists ? 'Overwrote' : 'Created')." app/Ai/Eval/Scorers/{$class}.php");
-            }
-
-            $entries[] = new ScorerEntry(code: "new {$class}", imports: ["{$namespace}\\{$class}"]);
+        if (! $exists || confirm("Overwrite existing {$class}?", default: false)) {
+            File::ensureDirectoryExists(dirname($path));
+            File::put($path, new ScorerGenerator()->generate($namespace, $class));
+            info(($exists ? 'Overwrote' : 'Created')." app/Ai/Eval/Scorers/{$class}.php");
         }
 
-        return $entries;
+        return new ScorerEntry(code: "new {$class}", imports: ["{$namespace}\\{$class}"]);
     }
 
     /** @param array<int, ScorerEntry> $scorers */

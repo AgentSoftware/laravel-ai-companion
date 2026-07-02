@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Agent;
 use ReflectionClass;
+use Symfony\Component\Finder\SplFileInfo;
 use Throwable;
 
 /**
@@ -28,35 +29,30 @@ final readonly class AgentDiscovery
             return [];
         }
 
-        $agents = [];
-
-        foreach (File::allFiles($this->path) as $file) {
-            if ($file->getExtension() !== 'php') {
-                continue;
-            }
-
-            $class = $this->namespace.Str::of($file->getRelativePathname())
+        return collect(File::allFiles($this->path))
+            ->filter(fn (SplFileInfo $file): bool => $file->getExtension() === 'php')
+            ->map(fn (SplFileInfo $file): string => $this->namespace.Str::of($file->getRelativePathname())
                 ->beforeLast('.php')
                 ->replace(DIRECTORY_SEPARATOR, '\\')
-                ->toString();
+                ->toString())
+            ->filter($this->isConcreteAgent(...))
+            ->sort()
+            ->values()
+            ->all();
+    }
 
-            try {
-                if (! class_exists($class)) {
-                    continue;
-                }
-
-                $reflection = new ReflectionClass($class);
-            } catch (Throwable) {
-                continue;
+    private function isConcreteAgent(string $class): bool
+    {
+        try {
+            if (! class_exists($class)) {
+                return false;
             }
 
-            if ($reflection->implementsInterface(Agent::class) && $reflection->isInstantiable()) {
-                $agents[] = $class;
-            }
+            $reflection = new ReflectionClass($class);
+        } catch (Throwable) {
+            return false;
         }
 
-        sort($agents);
-
-        return $agents;
+        return $reflection->implementsInterface(Agent::class) && $reflection->isInstantiable();
     }
 }
