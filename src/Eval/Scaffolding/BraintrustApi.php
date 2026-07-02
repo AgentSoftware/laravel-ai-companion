@@ -72,8 +72,10 @@ class BraintrustApi
     public static function toRow(array $event, bool $includeExpected, bool $includeMetadata): array
     {
         $input = $event['input'] ?? '';
-        // Log spans wrap the prompt as {"input": "..."}; datasets may hold it raw.
-        $prompt = is_array($input) ? ($input['input'] ?? json_encode($input)) : $input;
+        // Our agent spans ship input as {prompt, instructions} (see SpanBuilder);
+        // instructions are omitted — evals rebuild the real agent, whose code
+        // supplies them. Other shapes: {input: ...} wrappers or raw values.
+        $prompt = is_array($input) ? ($input['prompt'] ?? $input['input'] ?? json_encode($input)) : $input;
 
         $row = ['prompt' => (string) $prompt];
 

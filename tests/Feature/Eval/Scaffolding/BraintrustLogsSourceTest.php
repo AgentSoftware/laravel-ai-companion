@@ -16,7 +16,8 @@ beforeEach(function (): void {
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
         'api.braintrust.dev/btql' => Http::response(['data' => [
             [
-                'input' => ['input' => 'Plan pages for acme.com'],
+                // Real agent-span shape from SpanBuilder: prompt + instructions.
+                'input' => ['prompt' => 'Plan pages for acme.com', 'instructions' => 'You are a page planner.'],
                 'output' => ['text' => 'the plan'],
                 'span_attributes' => ['name' => 'PagePlannerAgent'],
                 'metadata' => ['model' => 'claude-sonnet-5'],
