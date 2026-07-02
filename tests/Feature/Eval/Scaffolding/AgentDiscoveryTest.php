@@ -28,7 +28,7 @@ it('returns an empty array for a path with no agents', function (): void {
 
 it('skips non-php files, unmatched class names, and reflection failures', function (): void {
     $discovery = new AgentDiscovery(
-        path: dirname(__DIR__, 3).'/Fixtures/discovery',
+        path: dirname(__DIR__, 3).'/Fixtures/Discovery',
         namespace: 'AgentSoftware\\LaravelAiCompanion\\Tests\\Fixtures\\Discovery\\',
     );
 
