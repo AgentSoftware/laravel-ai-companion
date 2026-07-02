@@ -233,6 +233,52 @@ class ScaffoldEvalCommand extends Command
         return new BraintrustDatasetSource($api, (string) $id);
     }
 
+    private function scorerEntryFor(string $builtin): ScorerEntry
+    {
+        if ($builtin === 'llm_judge') {
+            return new ScorerEntry(
+                code: sprintf(
+                    'new LlmJudgeScorer(name: %s, rubric: %s)',
+                    var_export(text(
+                        label: 'LLM judge name',
+                        default: 'quality',
+                        required: true,
+                        hint: 'The score\'s column name in results, e.g. "quality" or "on_brand".',
+                    ), true),
+                    var_export(text(
+                        label: 'LLM judge rubric',
+                        required: true,
+                        placeholder: 'e.g. Every page slug in the answer must come from the input list, grouped logically.',
+                        hint: 'Plain-English marking criteria — tell the judge what a 10/10 answer looks like for this agent.',
+                    ), true),
+                ),
+                imports: [LlmJudgeScorer::class],
+            );
+        }
+
+        if ($builtin === 'match') {
+            return new ScorerEntry(
+                code: "new MatchScorer(name: 'match', field: 'text', expected: 'expected') /* TODO: set field + expected row key */",
+                imports: [MatchScorer::class],
+            );
+        }
+
+        if ($builtin === 'range') {
+            return new ScorerEntry(
+                code: "new RangeScorer(name: 'length', field: 'text', min: 1, max: 500) /* TODO: tune bounds */",
+                imports: [RangeScorer::class],
+            );
+        }
+
+        if ($builtin === 'tool_routing') {
+            return new ScorerEntry(code: 'new ToolRoutingScorer', imports: [ToolRoutingScorer::class]);
+        }
+
+        // @codeCoverageIgnoreStart
+        throw new LogicException("Unknown built-in scorer option: {$builtin}");
+        // @codeCoverageIgnoreEnd
+    }
+
     /** @return array<int, ScorerEntry> */
     private function askScorers(): array
     {
@@ -250,36 +296,7 @@ class ScaffoldEvalCommand extends Command
         $entries = [];
 
         foreach ($builtins as $builtin) {
-            $entries[] = match ((string) $builtin) {
-                'llm_judge' => new ScorerEntry(
-                    code: sprintf(
-                        'new LlmJudgeScorer(name: %s, rubric: %s)',
-                        var_export(text(
-                            label: 'LLM judge name',
-                            default: 'quality',
-                            required: true,
-                            hint: 'The score\'s column name in results, e.g. "quality" or "on_brand".',
-                        ), true),
-                        var_export(text(
-                            label: 'LLM judge rubric',
-                            required: true,
-                            placeholder: 'e.g. Every page slug in the answer must come from the input list, grouped logically.',
-                            hint: 'Plain-English marking criteria — tell the judge what a 10/10 answer looks like for this agent.',
-                        ), true),
-                    ),
-                    imports: [LlmJudgeScorer::class],
-                ),
-                'match' => new ScorerEntry(
-                    code: "new MatchScorer(name: 'match', field: 'text', expected: 'expected') /* TODO: set field + expected row key */",
-                    imports: [MatchScorer::class],
-                ),
-                'range' => new ScorerEntry(
-                    code: "new RangeScorer(name: 'length', field: 'text', min: 1, max: 500) /* TODO: tune bounds */",
-                    imports: [RangeScorer::class],
-                ),
-                'tool_routing' => new ScorerEntry(code: 'new ToolRoutingScorer', imports: [ToolRoutingScorer::class]),
-                default => throw new LogicException("Unknown built-in scorer option: {$builtin}"),
-            };
+            $entries[] = $this->scorerEntryFor((string) $builtin);
         }
 
         $custom = text(

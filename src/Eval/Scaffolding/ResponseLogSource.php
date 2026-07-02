@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion\Eval\Scaffolding;
 
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
+use Illuminate\Database\Eloquent\Builder;
 
 final readonly class ResponseLogSource implements DatasetSource
 {
@@ -13,7 +14,7 @@ final readonly class ResponseLogSource implements DatasetSource
     public function fetch(int $limit, bool $includeExpected, bool $includeMetadata): array
     {
         return AiResponseLog::query()
-            ->when($this->agentClass !== null, fn ($query) => $query->where('agent', $this->agentClass))
+            ->when($this->agentClass !== null, fn (Builder $query) => $query->where('agent', $this->agentClass))
             ->latest()
             ->limit($limit)
             ->get()

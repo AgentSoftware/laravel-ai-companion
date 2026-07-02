@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\AgentDiscovery;
+use AgentSoftware\LaravelAiCompanion\Tests\Fixtures\Discovery\ValidAgent;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\Scaffolding\FixtureAgent;
 
 it('discovers concrete agent classes under a PSR-4 root', function (): void {
@@ -23,4 +24,17 @@ it('returns an empty array for a path with no agents', function (): void {
     );
 
     expect($discovery->discover())->toBe([]);
+});
+
+it('skips non-php files, unmatched class names, and reflection failures', function (): void {
+    $discovery = new AgentDiscovery(
+        path: dirname(__DIR__, 3).'/Fixtures/discovery',
+        namespace: 'AgentSoftware\\LaravelAiCompanion\\Tests\\Fixtures\\Discovery\\',
+    );
+
+    $found = $discovery->discover();
+
+    expect($found)->toBe([
+        ValidAgent::class,
+    ]);
 });

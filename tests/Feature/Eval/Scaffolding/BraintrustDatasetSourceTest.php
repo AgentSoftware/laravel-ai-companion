@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustDatasetSource;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -52,4 +53,11 @@ it('turns a 421 into an actionable EU data-plane error', function (): void {
 
     expect(fn () => new BraintrustApi()->datasets())
         ->toThrow(RuntimeException::class, 'BRAINTRUST_API_URL=https://api-eu.braintrust.dev');
+});
+
+it('rethrows non-421 request exceptions unchanged', function (): void {
+    Http::fake(['api.braintrust.dev/*' => Http::response(['error' => 'Internal Server Error'], 500)]);
+
+    expect(fn () => new BraintrustApi()->datasets())
+        ->toThrow(RequestException::class);
 });
