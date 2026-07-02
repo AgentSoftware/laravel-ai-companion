@@ -40,7 +40,8 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
         ->expectsQuestion('Which built-in scorers should judge the answers?', ['llm_judge'])
         ->expectsQuestion('LLM judge name', 'quality')
         ->expectsQuestion('LLM judge rubric', 'Is the plan complete and on-brand?')
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer')
+        // Duplicates (studly-cased) are deduped; invalid class names are skipped.
+        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer, no_hallucinated_urls_scorer, 123bad')
         ->assertSuccessful();
 
     $dataset = base_path('database/eval-datasets/fixture-agent.json');
@@ -57,7 +58,9 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
         ->and(File::get($target))->toContain("new LlmJudgeScorer(name: 'quality', rubric: 'Is the plan complete and on-brand?')")
         ->and(File::get($target))->toContain('new NoHallucinatedUrlsScorer');
 
-    expect(File::exists(app_path('Ai/Eval/Scorers/NoHallucinatedUrlsScorer.php')))->toBeTrue();
+    expect(File::exists(app_path('Ai/Eval/Scorers/NoHallucinatedUrlsScorer.php')))->toBeTrue()
+        ->and(substr_count(File::get($target), 'new NoHallucinatedUrlsScorer'))->toBe(1)
+        ->and(File::exists(app_path('Ai/Eval/Scorers/123bad.php')))->toBeFalse();
 });
 
 it('fails softly when no agents are found', function (): void {

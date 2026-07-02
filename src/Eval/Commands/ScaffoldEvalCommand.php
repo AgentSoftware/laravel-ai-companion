@@ -31,6 +31,7 @@ use function Laravel\Prompts\outro;
 use function Laravel\Prompts\search;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\text;
+use function Laravel\Prompts\warning;
 
 /**
  * Interactive wizard: pick an agent, pull historical traffic into a dataset
@@ -300,15 +301,30 @@ class ScaffoldEvalCommand extends Command
             default: '',
         );
 
-        foreach (Str::of($custom)->explode(',')->map(fn (string $name): string => trim($name))->filter() as $name) {
-            $class = Str::studly($name);
-            $namespace = $this->appEvalNamespace('Scorers');
-            $path = app_path("Ai/Eval/Scorers/{$class}.php");
+        $namespace = $this->appEvalNamespace('Scorers');
 
-            if (! File::exists($path) || confirm("Overwrite existing {$class}?", default: false)) {
+        $classes = Str::of($custom)
+            ->explode(',')
+            ->map(fn (string $name): string => Str::studly(trim($name)))
+            ->filter()
+            ->unique();
+
+        foreach ($classes as $class) {
+            // A name the generator can't turn into a valid class would render
+            // an app file that fails to parse — skip it instead.
+            if (! preg_match('/^[A-Z][A-Za-z0-9]*$/', $class)) {
+                warning("Skipping \"{$class}\" — not a valid class name.");
+
+                continue;
+            }
+
+            $path = app_path("Ai/Eval/Scorers/{$class}.php");
+            $exists = File::exists($path);
+
+            if (! $exists || confirm("Overwrite existing {$class}?", default: false)) {
                 File::ensureDirectoryExists(dirname($path));
                 File::put($path, new ScorerGenerator()->generate($namespace, $class));
-                info("Created app/Ai/Eval/Scorers/{$class}.php");
+                info(($exists ? 'Overwrote' : 'Created')." app/Ai/Eval/Scorers/{$class}.php");
             }
 
             $entries[] = new ScorerEntry(code: "new {$class}", imports: ["{$namespace}\\{$class}"]);
