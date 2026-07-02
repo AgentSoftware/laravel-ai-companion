@@ -74,22 +74,26 @@ class BraintrustApi
      */
     public static function toRow(array $event, bool $includeExpected, bool $includeMetadata): array
     {
-        $input = $event['input'] ?? '';
+        $input = data_get($event, 'input', '');
         // Our agent spans ship input as {prompt, instructions} (see SpanBuilder);
         // instructions are omitted — evals rebuild the real agent, whose code
         // supplies them. Other shapes: {input: ...} wrappers or raw values.
-        $prompt = is_array($input) ? ($input['prompt'] ?? $input['input'] ?? json_encode($input)) : $input;
+        $prompt = is_array($input)
+            ? data_get($input, 'prompt') ?? data_get($input, 'input') ?? json_encode($input)
+            : $input;
 
         $row = ['prompt' => (string) $prompt];
 
-        $expected = $event['expected'] ?? $event['output'] ?? null;
+        $expected = data_get($event, 'expected') ?? data_get($event, 'output');
 
         if ($includeExpected && $expected !== null) {
             $row['expected'] = $expected;
         }
 
-        if ($includeMetadata && is_array($event['metadata'] ?? null)) {
-            $row += collect($event['metadata'])->filter(fn (mixed $value): bool => is_scalar($value))->all();
+        $metadata = data_get($event, 'metadata');
+
+        if ($includeMetadata && is_array($metadata)) {
+            $row += collect($metadata)->filter(fn (mixed $value): bool => is_scalar($value))->all();
         }
 
         return $row;
