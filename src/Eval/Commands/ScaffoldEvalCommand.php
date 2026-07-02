@@ -143,9 +143,13 @@ class ScaffoldEvalCommand extends Command
             $limit = (int) text(label: 'How many rows?', default: '50', required: true);
 
             $fields = multiselect(
-                label: 'Include in each row (prompt is always included)',
-                options: ['expected' => 'Output (as "expected")', 'metadata' => 'Metadata (flattened scalars)'],
+                label: 'Each row always gets the prompt. What else should it keep?',
+                options: [
+                    'expected' => 'The answer the agent gave at the time — stored as "expected" so scorers can compare against it',
+                    'metadata' => 'Context values from the log (model, tags, custom keys) — used to rebuild the agent per row',
+                ],
                 default: ['expected', 'metadata'],
+                hint: 'Space toggles, enter confirms. Unsure? Keep both — you can always delete keys from the JSON later.',
             );
 
             $rows = $datasetSource->fetch(

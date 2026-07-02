@@ -32,7 +32,7 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the dataset come from?', 'response_logs')
         ->expectsQuestion('How many rows?', '50')
-        ->expectsQuestion('Include in each row (prompt is always included)', ['expected', 'metadata'])
+        ->expectsQuestion('Each row always gets the prompt. What else should it keep?', ['expected', 'metadata'])
         ->expectsQuestion('Built-in scorers', ['llm_judge'])
         ->expectsQuestion('LLM judge name', 'quality')
         ->expectsQuestion('LLM judge rubric', 'Is the plan complete and on-brand?')
