@@ -1,0 +1,60 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\Scorer;
+use Laravel\Ai\Contracts\Agent;
+{{ imports }}
+
+final class {{ class }} implements EvalTarget
+{
+    public function key(): string
+    {
+        return '{{ key }}';
+    }
+
+    public function label(): string
+    {
+        return '{{ label }}';
+    }
+
+    public function defaultDataset(): string
+    {
+        return '{{ dataset }}';
+    }
+
+    /** @param array<string, mixed> $row */
+    public function promptInput(array $row): string
+    {
+        return (string) ($row['prompt'] ?? '');
+    }
+
+    /** @return array<int, Scorer> */
+    public function scorers(): array
+    {
+        return [
+{{ scorers }}
+        ];
+    }
+
+    /** @param array<string, mixed> $row */
+    public function agent(EvalEnvironment $environment, array $row = []): Agent
+    {
+        return new {{ agentShort }}(
+{{ agentArgs }}
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    public function subjectInput(array $row): array
+    {
+        return [];
+    }
+}
