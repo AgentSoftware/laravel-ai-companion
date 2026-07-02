@@ -320,7 +320,7 @@ You get a coloured score table per run. With a Braintrust key set it pushes an e
 Run the interactive wizard to go from historical traffic to a runnable eval:
 
 ```bash
-php artisan ai:eval:scaffold
+php artisan ai:scaffold-eval
 ```
 
 It will:

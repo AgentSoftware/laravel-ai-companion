@@ -39,7 +39,7 @@ use function Laravel\Prompts\warning;
  */
 class ScaffoldEvalCommand extends Command
 {
-    protected $signature = 'ai:eval:scaffold';
+    protected $signature = 'ai:scaffold-eval';
 
     protected $description = 'Interactively scaffold an eval: dataset JSON, EvalTarget, and scorers';
 

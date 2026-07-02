@@ -28,7 +28,7 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
     config()->set('ai-companion.eval.scaffold.agent_path', dirname(__DIR__, 3).'/Support');
     config()->set('ai-companion.eval.scaffold.agent_namespace', 'AgentSoftware\\LaravelAiCompanion\\Tests\\Support\\');
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         // search() falls back to two questions in tests: the term, then the pick.
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
@@ -67,11 +67,11 @@ it('fails softly when no agents are found', function (): void {
     config()->set('ai-companion.eval.scaffold.agent_path', sys_get_temp_dir().'/empty-'.uniqid());
     config()->set('ai-companion.eval.scaffold.agent_namespace', 'App\\');
 
-    $this->artisan('ai:eval:scaffold')->assertFailed();
+    $this->artisan('ai:scaffold-eval')->assertFailed();
 });
 
 it('skips dataset building entirely and still writes an eval target', function (): void {
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -88,7 +88,7 @@ it('skips dataset building entirely and still writes an eval target', function (
 it('errors when braintrust is not configured for a braintrust source', function (): void {
     config()->set('ai-companion.braintrust.api_key', null);
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -116,7 +116,7 @@ it('scaffolds a dataset from braintrust production logs', function (): void {
         ]]),
     ]);
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -152,7 +152,7 @@ it('scaffolds a dataset from a picked braintrust dataset', function (): void {
         ]]),
     ]);
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -180,7 +180,7 @@ it('errors when no braintrust datasets exist to pick from', function (): void {
         'api.braintrust.dev/v1/dataset?*' => Http::response(['objects' => []]),
     ]);
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -201,7 +201,7 @@ it('surfaces exceptions raised while building the dataset as a soft error', func
         'api.braintrust.dev/btql' => Http::response(['error' => 'boom'], 500),
     ]);
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -217,7 +217,7 @@ it('surfaces exceptions raised while building the dataset as a soft error', func
 it('errors when the source returns no rows', function (): void {
     AiResponseLog::query()->delete();
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -241,7 +241,7 @@ it('declines to overwrite an existing dataset file when not confirmed', function
     File::ensureDirectoryExists(base_path('database/eval-datasets'));
     File::put(base_path('database/eval-datasets/fixture-agent.json'), json_encode(['existing' => true]));
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -259,7 +259,7 @@ it('declines to overwrite an existing eval target when not confirmed', function 
     File::ensureDirectoryExists(app_path('Ai/Eval/Targets'));
     File::put(app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php'), '<?php // existing target');
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -274,7 +274,7 @@ it('declines to overwrite an existing eval target when not confirmed', function 
 });
 
 it('scaffolds match, range, and tool_routing scorer entries', function (): void {
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
@@ -295,7 +295,7 @@ it('reuses an existing custom scorer class when the overwrite confirm is decline
     File::ensureDirectoryExists(dirname($scorerPath));
     File::put($scorerPath, '<?php // existing custom scorer');
 
-    $this->artisan('ai:eval:scaffold')
+    $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
         ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
         ->expectsQuestion('Eval key', 'fixture-agent')
