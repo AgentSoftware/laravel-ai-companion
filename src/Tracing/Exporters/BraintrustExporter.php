@@ -8,6 +8,7 @@ use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class BraintrustExporter implements TraceExporter
 {
@@ -19,11 +20,55 @@ class BraintrustExporter implements TraceExporter
 
     public function ship(array $spans): void
     {
-        $this->client()
-            ->post("/v1/project_logs/{$this->projectId()}/insert", [
-                'events' => array_map($this->toBraintrustEvent(...), $spans),
-            ])
-            ->throw();
+        foreach ($this->chunk(array_map($this->toBraintrustEvent(...), $spans)) as $events) {
+            $this->client()
+                ->post("/v1/project_logs/{$this->projectId()}/insert", ['events' => $events])
+                ->throw();
+        }
+    }
+
+    /**
+     * Chunk events so each request body stays under the insert endpoint's
+     * payload limit (20mb). Events too large to ship alone are dropped.
+     *
+     * @param  array<int, array<string, mixed>>  $events
+     * @return array<int, array<int, array<string, mixed>>>
+     */
+    private function chunk(array $events): array
+    {
+        $limit = (int) config('ai-companion.braintrust.max_payload_bytes', 10_000_000);
+
+        $chunks = [];
+        $current = [];
+        $currentSize = 0;
+
+        foreach ($events as $event) {
+            $size = strlen((string) json_encode($event));
+
+            if ($size > $limit) {
+                Log::warning('AI trace span exceeds the payload limit and was dropped.', [
+                    'span_id' => $event['span_id'],
+                    'bytes' => $size,
+                ]);
+
+                continue;
+            }
+
+            if ($current !== [] && $currentSize + $size > $limit) {
+                $chunks[] = $current;
+                $current = [];
+                $currentSize = 0;
+            }
+
+            $current[] = $event;
+            $currentSize += $size;
+        }
+
+        if ($current !== []) {
+            $chunks[] = $current;
+        }
+
+        return $chunks;
     }
 
     /**
