@@ -234,7 +234,7 @@ class ScaffoldEvalCommand extends Command
         if ($builtin === 'llm_judge') {
             return new ScorerEntry(
                 code: sprintf(
-                    'new LlmJudgeScorer(name: %s, rubric: %s)',
+                    "new LlmJudgeScorer(name: %s, rubric: %s, input: 'prompt', output: 'text')",
                     var_export(text(
                         label: 'LLM judge name',
                         default: 'quality',
@@ -365,7 +365,7 @@ class ScaffoldEvalCommand extends Command
         File::put($path, new TargetGenerator()->generate($namespace, $class, $agentClass, $key, $label, $datasetPath, $scorers));
 
         outro(sprintf(
-            "Created app/Ai/Eval/Targets/%s.php\nNext: add %s\\%s::class to ai-companion.eval.targets, then run your eval command (see readme #evaluations).",
+            "Created app/Ai/Eval/Targets/%s.php\nNext: add %s\\%s::class to ai-companion.eval.targets, then run your eval command (see readme #evaluations).\nWhen the eval is green, opt into online scoring: add the class to ai-companion.eval.online.targets to score live traffic on a schedule.",
             $class,
             $namespace,
             $class,

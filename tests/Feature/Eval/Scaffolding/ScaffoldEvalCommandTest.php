@@ -55,7 +55,7 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
     $target = app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php');
     expect(File::exists($target))->toBeTrue()
         ->and(File::get($target))->toContain("companyBrandTone: (string) (\$row['company_brand_tone'] ?? '')")
-        ->and(File::get($target))->toContain("new LlmJudgeScorer(name: 'quality', rubric: 'Is the plan complete and on-brand?')")
+        ->and(File::get($target))->toContain("new LlmJudgeScorer(name: 'quality', rubric: 'Is the plan complete and on-brand?', input: 'prompt', output: 'text')")
         ->and(File::get($target))->toContain('new NoHallucinatedUrlsScorer');
 
     expect(File::exists(app_path('Ai/Eval/Scorers/NoHallucinatedUrlsScorer.php')))->toBeTrue()

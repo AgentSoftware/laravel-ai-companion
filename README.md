@@ -340,6 +340,33 @@ Finish by registering the target in `config/ai-companion.php` under
 `eval.targets`. EU-pinned Braintrust orgs must set
 `BRAINTRUST_API_URL=https://api-eu.braintrust.dev`.
 
+### Online scoring
+
+Once an eval is green locally, "publish" it — opt the target into online
+scoring so the same PHP scorers run continuously against real production
+spans and write scores back to Braintrust (charts, filters, and automations
+on live traffic, no scorer rewrite):
+
+```php
+'eval' => [
+    'online' => [
+        'enabled' => true,          // registers the schedule
+        'schedule' => '*/15 * * * *',
+        'lookback_minutes' => 60,
+        'targets' => [
+            App\Ai\Eval\Targets\PagePlannerEvalTarget::class => 0.1, // sample 10%
+        ],
+    ],
+],
+```
+
+Each run fetches the agent's recent spans that don't yet carry this target's
+scores (server-side filter — stateless and double-score-proof), samples them
+deterministically by span id, runs the target's scorers, and merges the
+scores onto the spans. Scorers that need an expected answer
+(`MatchScorer`-style, marked `RequiresExpected`) are skipped online. Run
+manually with `php artisan ai:score-online --target=page-planner --lookback=1440`.
+
 ### Swapping the exporter
 
 Results flow through the `ExperimentExporter` driver (`braintrust` by default). Register another from your app — no package change — and select it via config:
