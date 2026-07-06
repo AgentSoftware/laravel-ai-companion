@@ -85,11 +85,12 @@ it('creates the online rule when none exists by name', function (): void {
         'api.braintrust.dev/v1/project_score' => Http::response(['id' => 'rule-1']),
     ]);
 
-    new BraintrustApi()->upsertOnlineRule('page-planner (online)', ['fn-1'], ['PagePlannerAgent'], 0.25);
+    new BraintrustApi()->upsertOnlineRule('page-planner (online)', ['fn-1'], ['PagePlannerAgent'], 0.25, 'Scores live spans.');
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && str_ends_with($request->url(), '/v1/project_score')
         && $request['score_type'] === 'online'
+        && $request['description'] === 'Scores live spans.'
         && $request['config']['online']['sampling_rate'] === 0.25
         && $request['config']['online']['scorers'] === [['type' => 'function', 'id' => 'fn-1']]
         && $request['config']['online']['apply_to_span_names'] === ['PagePlannerAgent']

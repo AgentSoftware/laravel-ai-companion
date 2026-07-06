@@ -102,6 +102,12 @@ class PublishEvalCommand extends Command
                 scorerIds: $ids->all(),
                 spanNames: [Str::studly($target->key())],
                 samplingRate: $sample,
+                description: sprintf(
+                    'Scores live %s spans with %s for "%s". Published from the app repo by ai:publish-eval — edit the JS there and re-publish, not here.',
+                    Str::studly($target->key()),
+                    $selected->map(fn (JsScorer $scorer): string => $scorer->name())->implode(', '),
+                    $target->label(),
+                ),
             );
         } catch (Throwable $exception) {
             error('Publish aborted — '.$exception->getMessage());

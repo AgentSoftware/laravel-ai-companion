@@ -52,6 +52,7 @@ it('publishes selected js scorers and creates the online rule', function (): voi
         && str_ends_with($request->url(), '/v1/project_score')
         && $request['name'] === 'js-stub (online)'
         && $request['config']['online']['sampling_rate'] === 0.5
+        && str_contains((string) $request['description'], 'my_check')
         && $request['config']['online']['apply_to_span_names'] === ['JsStub']);
 });
 

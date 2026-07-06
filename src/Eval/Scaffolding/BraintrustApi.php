@@ -159,7 +159,7 @@ class BraintrustApi
      * @param  array<int, string>  $scorerIds
      * @param  array<int, string>  $spanNames
      */
-    public function upsertOnlineRule(string $name, array $scorerIds, array $spanNames, float $samplingRate): void
+    public function upsertOnlineRule(string $name, array $scorerIds, array $spanNames, float $samplingRate, string $description = ''): void
     {
         $existing = collect((array) $this->request(fn (): Response => $this->client()
             ->get('/v1/project_score', [
@@ -181,6 +181,7 @@ class BraintrustApi
             $this->request(fn (): Response => $this->client()->post('/v1/project_score', [
                 'project_id' => $this->projectId(),
                 'name' => $name,
+                'description' => $description,
                 'score_type' => 'online',
                 'config' => $config,
             ]));
@@ -189,7 +190,7 @@ class BraintrustApi
         }
 
         $this->request(fn (): Response => $this->client()
-            ->patch("/v1/project_score/{$existing['id']}", ['config' => $config]));
+            ->patch("/v1/project_score/{$existing['id']}", ['description' => $description, 'config' => $config]));
     }
 
     /** @param  callable(): Response  $send */
