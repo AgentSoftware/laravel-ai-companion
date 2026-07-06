@@ -50,6 +50,7 @@ class BraintrustExporter implements TraceExporter
             'input' => $span['input'],
             'output' => $span['output'],
             'error' => $span['error'],
+            'scores' => ($span['scores'] ?? []) !== [] ? $span['scores'] : null,
             'metadata' => $span['metadata'] !== [] ? $span['metadata'] : null,
             'metrics' => $metrics !== [] ? $metrics : null,
         ], fn (mixed $value): bool => $value !== null);
