@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\RequiresExpected;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\MatchScorer;
 
@@ -37,4 +38,9 @@ it('scores overlap as a pass when nothing is expected', function (): void {
 
     expect($score->score)->toBe(1.0)
         ->and($score->metadata['note'])->toBe('no expected values');
+});
+
+it('is marked as requiring expected context', function (): void {
+    expect(new MatchScorer(name: 'm', field: 'text', expected: 'expected'))
+        ->toBeInstanceOf(RequiresExpected::class);
 });

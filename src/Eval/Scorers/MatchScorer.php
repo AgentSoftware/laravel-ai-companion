@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Scorers;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\RequiresExpected;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\Scorer;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Score;
@@ -15,7 +16,7 @@ use Illuminate\Support\Str;
  * `contains` (the expected string appears in the output), or `overlap` (Jaccard
  * of two lists — a missing or extra element both drop the score).
  */
-final class MatchScorer implements Scorer
+final class MatchScorer implements RequiresExpected, Scorer
 {
     public function __construct(
         private string $name,
