@@ -290,6 +290,38 @@ it('scaffolds match, range, and tool_routing scorer entries', function (): void 
         ->and($target)->toContain('new ToolRoutingScorer');
 });
 
+it('scaffolds tool_usage scorer entries with and without a pattern', function (): void {
+    $this->artisan('ai:scaffold-eval')
+        ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
+        ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
+        ->expectsQuestion('Eval key', 'fixture-agent')
+        ->expectsQuestion('Eval label', 'Fixture Agent')
+        ->expectsQuestion('Where should the test data come from?', 'skip')
+        ->expectsQuestion('Which built-in scorers should judge the answers?', ['tool_usage'])
+        ->expectsQuestion('Tool name pattern (wildcard, blank = any tool)', 'Write*')
+        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
+        ->assertSuccessful();
+
+    expect(File::get(app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php')))
+        ->toContain("new ToolUsageScorer(pattern: 'Write*')");
+
+    File::deleteDirectory(app_path('Ai'));
+
+    $this->artisan('ai:scaffold-eval')
+        ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
+        ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
+        ->expectsQuestion('Eval key', 'fixture-agent')
+        ->expectsQuestion('Eval label', 'Fixture Agent')
+        ->expectsQuestion('Where should the test data come from?', 'skip')
+        ->expectsQuestion('Which built-in scorers should judge the answers?', ['tool_usage'])
+        ->expectsQuestion('Tool name pattern (wildcard, blank = any tool)', '')
+        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
+        ->assertSuccessful();
+
+    expect(File::get(app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php')))
+        ->toContain('new ToolUsageScorer,');
+});
+
 it('reuses an existing custom scorer class when the overwrite confirm is declined', function (): void {
     $scorerPath = app_path('Ai/Eval/Scorers/NoHallucinatedUrlsScorer.php');
     File::ensureDirectoryExists(dirname($scorerPath));
