@@ -295,43 +295,45 @@ class ScaffoldEvalCommand extends Command
             ->map(fn (int|string $builtin): ScorerEntry => $this->scorerEntryFor((string) $builtin));
 
         $custom = text(
-            label: 'Custom scorer class names (comma-separated, blank for none)',
-            placeholder: 'e.g. NoHallucinatedUrlsScorer, ValidSlugsScorer',
-            hint: 'Custom scorers are agent-specific pass/fail checks the built-ins can\'t cover. Each name becomes an empty class in app/Ai/Eval/Scorers/ for you to implement, already wired into this eval. Press enter to skip.',
+            label: 'Custom scorer names (comma-separated, blank for none)',
+            placeholder: 'e.g. ValidComplianceJson, no-hallucinated-urls',
+            hint: 'Custom scorers are agent-specific pass/fail checks the built-ins can\'t cover — any casing works, names are normalised. Press enter to skip.',
             default: '',
         );
 
-        // A name the generator can't turn into a valid class would render an
-        // app file that fails to parse — skip those with a warning.
-        [$valid, $invalid] = Str::of($custom)
+        $names = Str::of($custom)
             ->explode(',')
-            ->map(fn (string $name): string => Str::studly(trim($name)))
-            ->filter()
-            ->unique()
-            ->partition(fn (string $class): bool => (bool) preg_match('/^[A-Z][A-Za-z0-9]*$/', $class));
-
-        $invalid->each(fn (string $class) => warning("Skipping \"{$class}\" — not a valid class name."));
-
-        $js = text(
-            label: 'JS scorer names (comma-separated, blank for none)',
-            placeholder: 'e.g. no-hallucinated-urls, valid-slugs',
-            hint: 'JS scorers run locally during ai:eval and can later go live on real traffic with ai:publish-eval. Each name becomes resources/ai/scorers/<name>.js. Press enter to skip.',
-            default: '',
-        );
-
-        $jsSlugs = Str::of($js)
-            ->explode(',')
-            ->map(fn (string $name): string => Str::slug(trim($name), '-'))
+            ->map(fn (string $name): string => trim($name))
             ->filter()
             ->unique();
 
-        [$validJs, $invalidJs] = $jsSlugs->partition(fn (string $slug): bool => (bool) preg_match('/^[a-z][a-z0-9-]*$/', $slug));
+        if ($names->isEmpty()) {
+            return $builtinEntries->values()->all();
+        }
 
-        $invalidJs->each(fn (string $slug) => warning("Skipping \"{$slug}\" — not a valid scorer name."));
+        $runtime = select(
+            label: 'Where should the custom scorers run?',
+            options: [
+                'js' => 'JS files (resources/ai/scorers/) — run offline via Node, publishable to live traffic with ai:publish-eval',
+                'php' => 'PHP classes (app/Ai/Eval/Scorers/) — full app context, offline only (Braintrust can\'t run PHP)',
+            ],
+            hint: 'Pick JS when the check is self-contained and you may want it scoring production; PHP when it needs your app.',
+        );
+
+        // A name that can't normalise to a valid class/slug would render a
+        // file that fails to parse — skip those with a warning.
+        [$valid, $invalid] = $names
+            ->map(fn (string $name): string => $runtime === 'php' ? Str::studly($name) : Str::slug($name, '-'))
+            ->unique()
+            ->partition(fn (string $normalized): bool => (bool) preg_match(
+                $runtime === 'php' ? '/^[A-Z][A-Za-z0-9]*$/' : '/^[a-z][a-z0-9-]*$/',
+                $normalized,
+            ));
+
+        $invalid->each(fn (string $name) => warning("Skipping \"{$name}\" — not a valid scorer name."));
 
         return $builtinEntries
-            ->merge($valid->map($this->customScorerEntry(...)))
-            ->merge($validJs->map($this->jsScorerEntry(...)))
+            ->merge($valid->map($runtime === 'php' ? $this->customScorerEntry(...) : $this->jsScorerEntry(...)))
             ->values()
             ->all();
     }

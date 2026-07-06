@@ -329,9 +329,10 @@ It will:
 2. Pull rows from an existing Braintrust dataset, recent Braintrust logs, or the
    `ai_response_logs` table into `database/eval-datasets/<key>.json`
    (`{"prompt": ..., "expected": ..., ...metadata}`).
-3. Let you pick built-in scorers (the LLM-judge rubric is asked for inline),
-   generate TODO stubs for custom PHP scorers in `app/Ai/Eval/Scorers/`, and
-   scaffold JS scorers in `resources/ai/scorers/` (see below).
+3. Let you pick built-in scorers (the LLM-judge rubric is asked for inline)
+   and name custom ones — you choose whether they scaffold as JS files in
+   `resources/ai/scorers/` (publishable online, see below) or PHP classes in
+   `app/Ai/Eval/Scorers/` (full app context, offline only).
 4. Generate `app/Ai/Eval/Targets/<Agent>EvalTarget.php` with the agent's
    constructor parameters mapped from dataset row keys.
 

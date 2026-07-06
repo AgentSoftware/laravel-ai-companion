@@ -42,8 +42,8 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
         ->expectsQuestion('LLM judge name', 'quality')
         ->expectsQuestion('LLM judge rubric', 'Is the plan complete and on-brand?')
         // Duplicates (studly-cased) are deduped; invalid class names are skipped.
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer, no_hallucinated_urls_scorer, 123bad')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer, no_hallucinated_urls_scorer, 123bad')
+        ->expectsQuestion('Where should the custom scorers run?', 'php')
         ->assertSuccessful();
 
     $dataset = base_path('database/eval-datasets/fixture-agent.json');
@@ -80,8 +80,7 @@ it('skips dataset building entirely and still writes an eval target', function (
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', '')
         ->assertSuccessful();
 
     expect(File::exists(base_path('database/eval-datasets/fixture-agent.json')))->toBeFalse()
@@ -128,8 +127,7 @@ it('scaffolds a dataset from braintrust production logs', function (): void {
         ->expectsQuestion('How many past interactions should the dataset hold?', '10')
         ->expectsQuestion('Each row always gets the prompt. What else should it keep?', ['expected', 'metadata'])
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', '')
         ->assertSuccessful();
 
     $rows = File::json(base_path('database/eval-datasets/fixture-agent.json'));
@@ -166,8 +164,7 @@ it('scaffolds a dataset from a picked braintrust dataset', function (): void {
         ->expectsQuestion('How many past interactions should the dataset hold?', '10')
         ->expectsQuestion('Each row always gets the prompt. What else should it keep?', ['expected', 'metadata'])
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', '')
         ->assertSuccessful();
 
     $rows = File::json(base_path('database/eval-datasets/fixture-agent.json'));
@@ -271,8 +268,7 @@ it('declines to overwrite an existing eval target when not confirmed', function 
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', '')
         ->expectsConfirmation('Overwrite existing FixtureAgentEvalTarget?', 'no')
         ->assertFailed();
 
@@ -287,8 +283,7 @@ it('scaffolds match, range, and tool_routing scorer entries', function (): void 
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', ['match', 'range', 'tool_routing'])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', '')
         ->assertSuccessful();
 
     $target = File::get(app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php'));
@@ -309,8 +304,8 @@ it('reuses an existing custom scorer class when the overwrite confirm is decline
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', '')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer')
+        ->expectsQuestion('Where should the custom scorers run?', 'php')
         ->expectsConfirmation('Overwrite existing NoHallucinatedUrlsScorer?', 'no')
         ->assertSuccessful();
 
@@ -328,8 +323,8 @@ it('scaffolds js scorers and wires them into the target', function (): void {
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', 'No Hallucinated Urls, no-hallucinated-urls, 123')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'No Hallucinated Urls, no-hallucinated-urls, 123')
+        ->expectsQuestion('Where should the custom scorers run?', 'js')
         ->assertSuccessful();
 
     // Deduped after slugging; numeric-only names are skipped like invalid PHP names.
@@ -355,8 +350,8 @@ it('reuses an existing js scorer file when the overwrite confirm is declined', f
         ->expectsQuestion('Eval label', 'Fixture Agent')
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer class names (comma-separated, blank for none)', '')
-        ->expectsQuestion('JS scorer names (comma-separated, blank for none)', 'no-hallucinated-urls')
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'no-hallucinated-urls')
+        ->expectsQuestion('Where should the custom scorers run?', 'js')
         ->expectsConfirmation('Overwrite existing no-hallucinated-urls.js?', 'no')
         ->assertSuccessful();
 
