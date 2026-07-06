@@ -55,7 +55,11 @@ final class {{ class }} implements EvalTarget
      */
     public function subjectInput(array $row): array
     {
-        // TODO: return any extra row context your scorers need (most targets need none).
-        return [];
+        // 'prompt' feeds LlmJudgeScorer's reference; 'expected' feeds MatchScorer
+        // and JS scorers. Add any extra row context your scorers need.
+        return [
+            'prompt' => (string) ($row['prompt'] ?? ''),
+            'expected' => $row['expected'] ?? null,
+        ];
     }
 }

@@ -35,7 +35,9 @@ it('renders an eval target with reflection-mapped constructor args', function ()
         ->toContain("new LlmJudgeScorer(name: 'quality', rubric: 'Is it good?')")
         ->toContain('return new FixtureAgent(')
         ->toContain("companyBrandTone: (string) (\$row['company_brand_tone'] ?? '')")
-        ->toContain("maxPages: (int) (\$row['max_pages'] ?? 5)");
+        ->toContain("maxPages: (int) (\$row['max_pages'] ?? 5)")
+        ->toContain("'prompt' => (string) (\$row['prompt'] ?? '')")
+        ->toContain("'expected' => \$row['expected'] ?? null");
 });
 
 it('emits container resolution with a TODO for object-typed params', function (): void {
