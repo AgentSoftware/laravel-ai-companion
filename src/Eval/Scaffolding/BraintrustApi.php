@@ -67,6 +67,42 @@ class BraintrustApi
     }
 
     /**
+     * Recent LLM spans for an agent that do not yet carry the given score —
+     * the statelessness anchor for online scoring: "unscored" is a server-side
+     * filter, so re-runs cannot double-score.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function unscoredSpans(string $agentName, string $scoreName, int $lookbackMinutes, int $limit): array
+    {
+        $agent = str_replace("'", "''", $agentName);
+        $score = preg_replace('/[^A-Za-z0-9_]/', '', $scoreName);
+
+        $filter = "span_attributes.type = 'llm'"
+            ." and span_attributes.name ILIKE '%{$agent}%'"
+            ." and scores.{$score} IS NULL"
+            ." and created > now() - INTERVAL {$lookbackMinutes} MINUTE";
+
+        $query = "select: * from: project_logs('{$this->projectId()}') filter: {$filter} sort: created desc limit: {$limit}";
+
+        return (array) $this->request(fn (): Response => $this->client()
+            ->post('/btql', ['query' => $query, 'fmt' => 'json']))
+            ->json('data', []);
+    }
+
+    /**
+     * Merge score objects onto existing spans (verified against the OpenAPI
+     * spec: insert events with `_is_merge: true` update rows by id).
+     *
+     * @param  array<int, array<string, mixed>>  $events
+     */
+    public function mergeScores(array $events): void
+    {
+        $this->request(fn (): Response => $this->client()
+            ->post("/v1/project_logs/{$this->projectId()}/insert", ['events' => $events]));
+    }
+
+    /**
      * Normalize a Braintrust event (dataset or log) into a dataset row.
      *
      * @param  array<string, mixed>  $event
