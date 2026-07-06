@@ -66,13 +66,25 @@ function onlineRecordingScorer(array &$captured): Scorer
 }
 
 /**
+ * Fakes both BTQL shapes: the unscored-span fetch and the per-span
+ * child-tool-name lookup (queries filtering on type = 'tool').
+ *
  * @param  array<int, array<string, mixed>>  $spans
+ * @param  array<int, string>  $toolNames
  */
-function fakeOnlineBraintrust(array $spans): void
+function fakeOnlineBraintrust(array $spans, array $toolNames = []): void
 {
     Http::fake([
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
-        'api.braintrust.dev/btql' => Http::response(['data' => $spans]),
+        'api.braintrust.dev/btql' => function (Request $request) use ($spans, $toolNames) {
+            if (str_contains((string) $request['query'], "type = 'tool'")) {
+                return Http::response(['data' => collect($toolNames)
+                    ->map(fn (string $name): array => ['span_attributes' => ['name' => $name, 'type' => 'tool']])
+                    ->all()]);
+            }
+
+            return Http::response(['data' => $spans]);
+        },
         'api.braintrust.dev/v1/project_logs/proj-1/insert' => Http::response(['row_ids' => []]),
     ]);
 }
@@ -130,6 +142,24 @@ it('passes the span prompt to scorers under both prompt and brief input keys', f
     expect($captured[1]->input['brief'])->toBe('brief two');
     expect($captured[1]->input['text'])->toBe('answer two');
     expect($captured[1]->output)->toBe(['text' => 'answer two']);
+});
+
+it('passes the invocation tool-span names to scorers under tool_calls', function (): void {
+    fakeOnlineBraintrust(
+        spans: [['id' => 'span-1', 'output' => 'done', 'input' => ['prompt' => 'write it']]],
+        toolNames: ['WriteTextTool', 'WriteImageTool'],
+    );
+
+    $captured = [];
+
+    new OnlineSpanScorer(new BraintrustApi, new SpanSampler)
+        ->score(new OnlineStubTarget([onlineRecordingScorer($captured)]), sampleRate: 1.0, lookbackMinutes: 60);
+
+    expect($captured)->toHaveCount(1)
+        ->and($captured[0]->input['tool_calls'])->toBe(['WriteTextTool', 'WriteImageTool']);
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/btql')
+        && str_contains((string) $request['query'], "span_parents includes 'span-1'"));
 });
 
 it('falls back to casting the raw input when the span input is not array-shaped', function (): void {

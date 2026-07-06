@@ -91,6 +91,29 @@ class BraintrustApi
     }
 
     /**
+     * Names of the tool spans invoked by an agent span (tool spans carry the
+     * agent invocation id in span_parents — see SpanBuilder::toolSpan). Lets
+     * scorers assert real tool usage on live traffic.
+     *
+     * @return array<int, string>
+     */
+    public function childToolNames(string $spanId): array
+    {
+        $escaped = str_replace("'", "''", $spanId);
+
+        $query = "select: span_attributes from: project_logs('{$this->projectId()}')"
+            ." filter: span_attributes.type = 'tool' and span_parents includes '{$escaped}' limit: 500";
+
+        return collect((array) $this->request(fn (): Response => $this->client()
+            ->post('/btql', ['query' => $query, 'fmt' => 'json']))
+            ->json('data', []))
+            ->map(fn (array $span): string => (string) data_get($span, 'span_attributes.name', ''))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Merge score objects onto existing spans (verified against the OpenAPI
      * spec: insert events with `_is_merge: true` update rows by id).
      *

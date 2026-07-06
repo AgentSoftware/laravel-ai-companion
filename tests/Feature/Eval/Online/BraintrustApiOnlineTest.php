@@ -13,9 +13,16 @@ beforeEach(function (): void {
 
     Http::fake([
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
-        'api.braintrust.dev/btql' => Http::response(['data' => [
-            ['id' => 'span-1', 'input' => ['prompt' => 'p'], 'output' => 'answer'],
-        ]]),
+        // Query-aware: tool-child lookups get tool spans, everything else gets llm spans.
+        'api.braintrust.dev/btql' => fn (Request $request) => str_contains((string) $request['query'], "type = 'tool'")
+            ? Http::response(['data' => [
+                ['span_attributes' => ['name' => 'WriteTextTool', 'type' => 'tool']],
+                ['span_attributes' => ['name' => 'WriteLinkTool', 'type' => 'tool']],
+                ['span_attributes' => ['type' => 'tool']],
+            ]])
+            : Http::response(['data' => [
+                ['id' => 'span-1', 'input' => ['prompt' => 'p'], 'output' => 'answer'],
+            ]]),
         'api.braintrust.dev/v1/project_logs/proj-1/insert' => Http::response(['row_ids' => ['span-1']]),
     ]);
 });
@@ -50,4 +57,14 @@ it('merges scores onto existing spans', function (): void {
         && $request['events'][0]['id'] === 'span-1'
         && $request['events'][0]['_is_merge'] === true
         && $request['events'][0]['scores'] === ['quality' => 0.9]);
+});
+
+it('lists the tool-span names of an agent invocation', function (): void {
+    $names = new BraintrustApi()->childToolNames("span-o'one");
+
+    expect($names)->toBe(['WriteTextTool', 'WriteLinkTool']);
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/btql')
+        && str_contains((string) $request['query'], "span_parents includes 'span-o''one'")
+        && str_contains((string) $request['query'], "span_attributes.type = 'tool'"));
 });

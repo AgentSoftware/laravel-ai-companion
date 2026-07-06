@@ -91,10 +91,13 @@ final readonly class OnlineSpanScorer
             context: null,
             // The span's prompt is the judge's reference: exposed under 'prompt' and
             // 'brief' (LlmJudgeScorer's default input key), plus the output text.
+            // tool_calls carries the names of the tool spans this invocation ran,
+            // so scorers can assert real tool usage on live traffic.
             input: [
                 'text' => is_array($output) ? (string) ($output['text'] ?? '') : (string) $output,
                 'prompt' => $prompt,
                 'brief' => $prompt,
+                'tool_calls' => $this->api->childToolNames((string) $span['id']),
             ],
         );
 
