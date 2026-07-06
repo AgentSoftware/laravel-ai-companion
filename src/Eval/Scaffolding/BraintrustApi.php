@@ -12,9 +12,10 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Read-side Braintrust client for scaffolding: list datasets, fetch dataset
- * events, fetch recent project-log events. The ONLY Braintrust-aware class in
- * Eval/Scaffolding — everything else speaks DatasetSource rows.
+ * The single Braintrust-aware client for the eval tooling: scaffolding reads
+ * (datasets, dataset events, recent project-log events) and publish writes
+ * (scorer functions, invocations, online scoring rules). Everything else
+ * speaks neutral shapes — swap operators by replacing this class.
  */
 class BraintrustApi
 {
@@ -97,6 +98,100 @@ class BraintrustApi
         }
 
         return $row;
+    }
+
+    /**
+     * Create-or-update a node code scorer function by slug; returns the id.
+     * Skips the write entirely when the stored code already matches.
+     */
+    public function upsertFunction(string $slug, string $name, string $code): string
+    {
+        $existing = collect((array) $this->request(fn (): Response => $this->client()
+            ->get('/v1/function', ['project_id' => $this->projectId(), 'slug' => $slug, 'limit' => 1]))
+            ->json('objects', []))->first();
+
+        $functionData = [
+            'type' => 'code',
+            'data' => [
+                'type' => 'inline',
+                'runtime_context' => ['runtime' => 'node', 'version' => '20'],
+                'code' => $code,
+            ],
+        ];
+
+        if ($existing === null) {
+            return (string) $this->request(fn (): Response => $this->client()->post('/v1/function', [
+                'project_id' => $this->projectId(),
+                'name' => $name,
+                'slug' => $slug,
+                'function_type' => 'scorer',
+                'function_data' => $functionData,
+            ]))->json('id');
+        }
+
+        if (data_get($existing, 'function_data.data.code') !== $code) {
+            $this->request(fn (): Response => $this->client()
+                ->patch("/v1/function/{$existing['id']}", ['function_data' => $functionData]));
+        }
+
+        return (string) $existing['id'];
+    }
+
+    /**
+     * Run a function server-side (the publish smoke test runs the scorer in the
+     * REAL sandbox — local Node can diverge from it).
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    public function invokeFunction(string $id, array $input): array
+    {
+        $result = $this->request(fn (): Response => $this->client()
+            ->post("/v1/function/{$id}/invoke", ['input' => $input]))
+            ->json();
+
+        return is_array($result) ? $result : ['score' => $result];
+    }
+
+    /**
+     * Create-or-update the project's online scoring rule by name. Re-publishing
+     * reconciles: the rule's scorer list becomes exactly $scorerIds.
+     *
+     * @param  array<int, string>  $scorerIds
+     * @param  array<int, string>  $spanNames
+     */
+    public function upsertOnlineRule(string $name, array $scorerIds, array $spanNames, float $samplingRate, string $description = ''): void
+    {
+        $existing = collect((array) $this->request(fn (): Response => $this->client()
+            ->get('/v1/project_score', [
+                'project_id' => $this->projectId(),
+                'project_score_name' => $name,
+                'score_type' => 'online',
+                'limit' => 1,
+            ]))
+            ->json('objects', []))->first();
+
+        $config = ['online' => [
+            'sampling_rate' => $samplingRate,
+            'scorers' => collect($scorerIds)->map(fn (string $id): array => ['type' => 'function', 'id' => $id])->values()->all(),
+            'apply_to_root_span' => false,
+            'apply_to_span_names' => $spanNames,
+        ]];
+
+        if ($existing === null) {
+            $this->request(fn (): Response => $this->client()->post('/v1/project_score', [
+                'project_id' => $this->projectId(),
+                'name' => $name,
+                'description' => $description,
+                'score_type' => 'online',
+                'config' => $config,
+            ]));
+
+            return;
+        }
+
+        $this->request(fn (): Response => $this->client()
+            ->patch("/v1/project_score/{$existing['id']}", ['description' => $description, 'config' => $config]));
     }
 
     /** @param  callable(): Response  $send */

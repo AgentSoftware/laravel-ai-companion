@@ -1,0 +1,19 @@
+"use strict";
+
+// {{ name }} — runs locally via `php artisan ai:eval` (Node) and, once
+// published with `php artisan ai:publish-eval`, in Braintrust's sandbox
+// against live traffic. Keep it self-contained: `fetch` is available in
+// both runtimes; AbortSignal.timeout is NOT available in the sandbox.
+//
+// Payload: output = the agent's response (object; text answers arrive as
+// { text: "..." }); input = row/span context (prompt, tool_calls, ...);
+// expected = the dataset row's expected answer (null on live traffic).
+async function handler({ output, input, expected }) {
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+
+  // TODO: score the answer between 0 and 1.
+  return {
+    score: text.length > 0 ? 1 : 0,
+    metadata: {},
+  };
+}

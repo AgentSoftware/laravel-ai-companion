@@ -329,14 +329,74 @@ It will:
 2. Pull rows from an existing Braintrust dataset, recent Braintrust logs, or the
    `ai_response_logs` table into `database/eval-datasets/<key>.json`
    (`{"prompt": ..., "expected": ..., ...metadata}`).
-3. Let you pick built-in scorers (the LLM-judge rubric is asked for inline) and
-   generate TODO stubs for custom ones in `app/Ai/Eval/Scorers/`.
+3. Let you pick built-in scorers (the LLM-judge rubric is asked for inline)
+   and name custom ones — every custom scorer scaffolds as a JS file in
+   `resources/ai/scorers/` (any casing, normalised to a slug), runnable
+   offline and publishable online (see below).
 4. Generate `app/Ai/Eval/Targets/<Agent>EvalTarget.php` with the agent's
    constructor parameters mapped from dataset row keys.
 
 Finish by registering the target in `config/ai-companion.php` under
 `eval.targets`. EU-pinned Braintrust orgs must set
 `BRAINTRUST_API_URL=https://api-eu.braintrust.dev`.
+
+### JS scorers — write once, run offline, publish online
+
+Self-contained checks (regex, URL validity, JSON shape) can be written as JS
+scorer files instead of PHP classes. The file lives in your repo like any
+other code — reviewed in PRs, versioned, single source of truth — and the
+same file runs in two places: locally via Node during `ai:eval`, and (once
+published) in Braintrust's sandbox against live traffic.
+
+```bash
+php artisan ai:scaffold-eval        # scaffolds resources/ai/scorers/<name>.js and wires it in
+php artisan ai:eval page-planner    # runs it locally — iterate freely
+php artisan ai:publish-eval         # interactively pick what goes live
+```
+
+A scorer file is a plain `async function handler({ output, input, expected })`
+returning `{ score, metadata }` (score 0–1). Offline runs are **fully local**:
+`JsScorer` executes the file via Node with zero Braintrust contact, so you can
+iterate on the scoring logic as fast as you can re-run the eval. Requires
+`node` on the machine running evals.
+
+### Live evals — publishing for online scoring
+
+Offline evals answer *"did my change make the agent better?"* before you
+merge. **Live evals answer "is the agent still behaving in production?"** —
+every real interaction gets scored as it happens, so quality drift, a bad
+prompt deploy, or a new failure mode (an agent hallucinating image URLs, say)
+shows up in Braintrust within minutes as a falling score you can chart,
+filter, and alert on — instead of waiting for a customer to notice.
+
+Publishing is an explicit, selective step — nothing reaches Braintrust until
+you run it:
+
+```bash
+php artisan ai:publish-eval
+```
+
+The wizard walks you through: pick the eval target → tick which of its JS
+scorers go live (unticked scorers never leave your repo — PHP scorers can't
+be published since Braintrust can't run PHP) → set a sampling rate (every
+scored span runs every published scorer; sample down when traffic is high).
+For each ticked scorer it then:
+
+1. Creates or updates the Braintrust scorer function (matched by slug, skipped
+   when the code is unchanged — the repo stays the source of truth).
+2. **Smoke-tests it in Braintrust's real sandbox** — the runtimes are close
+   but not identical, and the publish aborts before touching any rule if the
+   scorer fails up there.
+3. Creates or updates the online scoring rule for the target's agent spans.
+
+Re-publishing reconciles: the rule ends up with exactly the ticked set, so
+un-ticking a scorer on the next publish removes it from live scoring. Flags
+for CI: `--target=`, `--scorers=`, `--sample=`.
+
+Note: the online rule matches live spans by exact name, derived from the
+target key (`page-planner` → `PagePlanner` and `PagePlannerAgent`), so keep
+the scaffold's default key or one derived from the agent class name — an
+unrelated key publishes a rule that silently matches nothing.
 
 ### Swapping the exporter
 
