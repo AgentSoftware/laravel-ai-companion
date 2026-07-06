@@ -367,6 +367,10 @@ scores onto the spans. Scorers that need an expected answer
 (`MatchScorer`-style, marked `RequiresExpected`) are skipped online. Run
 manually with `php artisan ai:score-online --target=page-planner --lookback=1440`.
 
+Note: online scoring finds an agent's spans by matching the target key against
+the agent class name (`page-planner` → `PagePlannerAgent`), so keep the
+scaffold's default key or a key derived from the class name.
+
 ### Swapping the exporter
 
 Results flow through the `ExperimentExporter` driver (`braintrust` by default). Register another from your app — no package change — and select it via config:

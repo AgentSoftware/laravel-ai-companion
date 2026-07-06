@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Scorers;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\RequiresExpected;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\Scorer;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Score;
@@ -20,7 +21,7 @@ use Illuminate\Support\Str;
  * the subject input. Pass `declinePhrase` to surface — without scoring — whether
  * a declined reply used the app's standard wording.
  */
-final class ToolRoutingScorer implements Scorer
+final class ToolRoutingScorer implements RequiresExpected, Scorer
 {
     public function __construct(
         private string $name = 'routing',

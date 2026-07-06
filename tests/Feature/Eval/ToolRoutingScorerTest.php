@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\RequiresExpected;
 use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ToolRoutingScorer;
 
@@ -56,4 +57,9 @@ it('scores a correct decline as 1.0 and a wrongful call as 0.0', function (): vo
     expect($scorer->score($declined)->score)->toBe(1.0)
         ->and($scorer->score($declined)->metadata['standard_wording'])->toBeTrue()
         ->and($scorer->score($acted)->score)->toBe(0.0);
+});
+
+it('is marked as requiring expected context', function (): void {
+    expect(new ToolRoutingScorer)
+        ->toBeInstanceOf(RequiresExpected::class);
 });
