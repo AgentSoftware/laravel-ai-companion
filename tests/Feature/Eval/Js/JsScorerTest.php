@@ -75,3 +75,12 @@ it('really runs the scorer through node when available', function (): void {
     expect($score->score)->toBe(1.0)
         ->and($score->metadata['prompt'])->toBe('write something good');
 })->group('real-node');
+
+it('explains a missing node binary instead of a raw exit code', function (): void {
+    Process::fake(['*' => Process::result(output: '', errorOutput: '', exitCode: 127)]);
+
+    $score = new JsScorer(jsScorerFixture())->score(new EvalSubject(output: []));
+
+    expect($score->score)->toBe(0.0)
+        ->and($score->metadata['error'])->toContain('Node.js not found on PATH');
+});
