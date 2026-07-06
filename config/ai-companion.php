@@ -48,5 +48,15 @@ return [
             'agent_path' => null,      // defaults to app_path() at runtime
             'agent_namespace' => null, // defaults to the app namespace at runtime
         ],
+
+        // Online scoring: run local PHP scorers against recent production spans on
+        // a schedule and merge scores back onto the Braintrust spans.
+        'online' => [
+            'enabled' => env('AI_COMPANION_ONLINE_SCORING_ENABLED', false),
+            'schedule' => env('AI_COMPANION_ONLINE_SCORING_SCHEDULE', '*/15 * * * *'),
+            'lookback_minutes' => env('AI_COMPANION_ONLINE_SCORING_LOOKBACK', 60),
+            // EvalTarget class => sample rate (0.0–1.0 of matching spans scored).
+            'targets' => [],
+        ],
     ],
 ];

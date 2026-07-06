@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion;
 
 use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScaffoldEvalCommand;
+use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScoreOnlineCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
@@ -27,7 +28,7 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
-            ->hasCommand(ScaffoldEvalCommand::class)
+            ->hasCommands(ScaffoldEvalCommand::class, ScoreOnlineCommand::class)
             ->discoversMigrations();
     }
 
@@ -61,6 +62,14 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
             $this->app->afterResolving(Schedule::class, function (Schedule $schedule): void {
                 $schedule->command('model:prune', ['--model' => AiResponseLog::class])
                     ->cron(config('ai-companion.response_logs.prune_schedule', '0 3 * * *'));
+            });
+        }
+
+        if (config('ai-companion.eval.online.enabled')) {
+            $this->app->afterResolving(Schedule::class, function (Schedule $schedule): void {
+                $schedule->command('ai:score-online')
+                    ->cron((string) config('ai-companion.eval.online.schedule', '*/15 * * * *'))
+                    ->withoutOverlapping();
             });
         }
     }
