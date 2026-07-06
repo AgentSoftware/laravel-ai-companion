@@ -301,7 +301,7 @@ class ScaffoldEvalCommand extends Command
                 'llm_judge' => 'LlmJudgeScorer — an LLM grades each answer against a rubric you write (most flexible)',
                 'range' => 'RangeScorer — checks a field\'s length/count falls inside min–max bounds',
                 'tool_routing' => 'ToolRoutingScorer — checks the agent called the tools the row expected',
-                'tool_usage' => 'ToolUsageScorer — checks the agent actually called tools instead of just talking',
+                'tool_usage' => 'ToolUsageScorer — checks the agent actually called tools instead of just talking (works on live traffic too)',
             ],
             hint: 'Scorers give each answer a 0–1 score. Space toggles, enter confirms; pick none if you only want custom scorers.',
         );

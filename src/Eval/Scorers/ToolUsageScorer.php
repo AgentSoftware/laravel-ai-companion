@@ -11,9 +11,10 @@ use Illuminate\Support\Str;
 
 /**
  * Checks the agent actually invoked tools instead of answering conversationally.
- * Reads the invocation's tool names from input['tool_calls'] — populated by the
- * eval run loop from the agent's response — and scores 1.0 when at least `min`
- * calls match `pattern` (Str::is wildcard, e.g. 'Write*'; null matches any tool).
+ * Reads the invocation's tool names from input['tool_calls'] — populated by
+ * RunEvalCommand offline and OnlineSpanScorer online — and scores 1.0 when at
+ * least `min` calls match `pattern` (Str::is wildcard, e.g. 'Write*'; null
+ * matches any tool).
  */
 final readonly class ToolUsageScorer implements Scorer
 {

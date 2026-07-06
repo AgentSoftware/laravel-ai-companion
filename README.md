@@ -367,6 +367,14 @@ scores onto the spans. Scorers that need an expected answer
 (`MatchScorer`-style, marked `RequiresExpected`) are skipped online. Run
 manually with `php artisan ai:score-online --target=page-planner --lookback=1440`.
 
+Scorers receive the invocation's actual tool-span names in
+`$subject->input['tool_calls']` (offline and online), so `ToolUsageScorer`
+can catch agents that answer conversationally instead of calling their tools:
+
+```php
+new ToolUsageScorer(name: 'wrote_content', pattern: 'Write*'), // 1.0 if any Write* tool ran
+```
+
 Note: online scoring finds an agent's spans by matching the target key against
 the agent class name (`page-planner` → `PagePlannerAgent`), so keep the
 scaffold's default key or a key derived from the class name.
