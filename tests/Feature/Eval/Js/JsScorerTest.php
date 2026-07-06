@@ -57,6 +57,11 @@ it('returns 0.0 with an error when the runner prints invalid json', function ():
         ->and($score->metadata['error'])->toContain('JSON');
 });
 
+it('throws when the scorer file is not readable', function (): void {
+    expect(fn (): string => (new JsScorer('/nowhere/missing-scorer.js'))->code())
+        ->toThrow(RuntimeException::class, '/nowhere/missing-scorer.js');
+});
+
 it('really runs the scorer through node when available', function (): void {
     if (Process::run(['which', 'node'])->failed()) {
         $this->markTestSkipped('node not installed');

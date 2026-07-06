@@ -29,7 +29,7 @@ final readonly class JsScorer implements Scorer
 
     public function code(): string
     {
-        $code = file_get_contents($this->path);
+        $code = @file_get_contents($this->path);
 
         if ($code === false) {
             throw new RuntimeException("JS scorer file not readable: {$this->path}");
