@@ -51,9 +51,12 @@ final readonly class JsScorer implements Scorer
             ->run(['node', __DIR__.'/scorer-runner.mjs', $this->path]);
 
         if ($result->failed()) {
-            return new Score($this->name(), 0.0, [
-                'error' => trim($result->errorOutput()) !== '' ? trim($result->errorOutput()) : 'node exited '.$result->exitCode(),
-            ]);
+            // 127 = command not found: the one failure that isn't the scorer's fault.
+            $error = $result->exitCode() === 127
+                ? 'Node.js not found on PATH — it is required to run JS scorers locally.'
+                : (trim($result->errorOutput()) !== '' ? trim($result->errorOutput()) : 'node exited '.$result->exitCode());
+
+            return new Score($this->name(), 0.0, ['error' => $error]);
         }
 
         try {

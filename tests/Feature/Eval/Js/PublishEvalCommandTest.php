@@ -119,3 +119,15 @@ it('drops unresolvable target classes and continues', function (): void {
     $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => '1'])
         ->assertSuccessful();
 });
+
+it('rejects an invalid sample rate before publishing anything', function (): void {
+    fakePublishBraintrust();
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => 'abc'])
+        ->assertFailed();
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => '1.5'])
+        ->assertFailed();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/v1/function'));
+});

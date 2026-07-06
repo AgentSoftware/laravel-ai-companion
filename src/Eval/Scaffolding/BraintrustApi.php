@@ -12,9 +12,10 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Read-side Braintrust client for scaffolding: list datasets, fetch dataset
- * events, fetch recent project-log events. The ONLY Braintrust-aware class in
- * Eval/Scaffolding — everything else speaks DatasetSource rows.
+ * The single Braintrust-aware client for the eval tooling: scaffolding reads
+ * (datasets, dataset events, recent project-log events) and publish writes
+ * (scorer functions, invocations, online scoring rules). Everything else
+ * speaks neutral shapes — swap operators by replacing this class.
  */
 class BraintrustApi
 {

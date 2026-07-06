@@ -1,3 +1,5 @@
+"use strict";
+
 // {{ name }} — runs locally via `php artisan ai:eval` (Node) and, once
 // published with `php artisan ai:publish-eval`, in Braintrust's sandbox
 // against live traffic. Keep it self-contained: `fetch` is available in

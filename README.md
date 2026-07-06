@@ -357,6 +357,11 @@ target's spans. Unticked scorers never leave your repo; re-publishing
 reconciles the rule to exactly the ticked set. Requires `node` locally for
 offline runs.
 
+Note: the online rule matches live spans by deriving the agent span name from
+the target key (`page-planner` → `PagePlanner`, matching `PagePlannerAgent`
+spans), so keep the scaffold's default key or one derived from the agent
+class name — an unrelated key publishes a rule that silently matches nothing.
+
 ### Swapping the exporter
 
 Results flow through the `ExperimentExporter` driver (`braintrust` by default). Register another from your app — no package change — and select it via config:

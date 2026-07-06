@@ -78,12 +78,20 @@ class PublishEvalCommand extends Command
             return self::SUCCESS;
         }
 
-        $sample = max(0.0, min(1.0, (float) ($this->option('sample') ?? text(
+        $rawSample = (string) ($this->option('sample') ?? text(
             label: 'What fraction of live traffic should be scored? (0.0–1.0)',
             default: '1.0',
             required: true,
             hint: 'Every scored span runs each published scorer — sample down when traffic or scorer cost is high.',
-        ))));
+        ));
+
+        if (! is_numeric($rawSample) || (float) $rawSample < 0.0 || (float) $rawSample > 1.0) {
+            error("Invalid sample rate [{$rawSample}] — pass a number between 0.0 and 1.0.");
+
+            return self::FAILURE;
+        }
+
+        $sample = (float) $rawSample;
 
         try {
             $ids = $selected->map(function (JsScorer $scorer) use ($api): string {
@@ -91,7 +99,7 @@ class PublishEvalCommand extends Command
                 $id = $api->upsertFunction($slug, Str::headline($scorer->name()), $scorer->code());
 
                 // Smoke test in the REAL sandbox — local Node can diverge from it.
-                $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => []]);
+                $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => [], 'expected' => null]);
                 info("{$scorer->name()}: synced and sandbox smoke test passed.");
 
                 return $id;

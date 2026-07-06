@@ -8,6 +8,10 @@ const file = process.argv[2];
 const source = readFileSync(file, "utf8");
 const payload = JSON.parse(readFileSync(0, "utf8"));
 
+// eval() is deliberate: Braintrust scorer files declare `function handler`
+// with no export, so there is nothing to import. The scorer is the dev's own
+// repo-versioned code, and runaway scripts are bounded by the 60s process
+// timeout in JsScorer::score().
 const handler = (0, eval)(`${source}\n;handler`);
 
 if (typeof handler !== "function") {
