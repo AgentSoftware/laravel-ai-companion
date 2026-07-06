@@ -41,9 +41,8 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
         ->expectsQuestion('Which built-in scorers should judge the answers?', ['llm_judge'])
         ->expectsQuestion('LLM judge name', 'quality')
         ->expectsQuestion('LLM judge rubric', 'Is the plan complete and on-brand?')
-        // Duplicates (studly-cased) are deduped; invalid class names are skipped.
-        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer, no_hallucinated_urls_scorer, 123bad')
-        ->expectsQuestion('Where should the custom scorers run?', 'php')
+        // Duplicates (slugged) are deduped; invalid names are skipped.
+        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'NoHallucinatedUrls, no-hallucinated-urls, 123bad')
         ->assertSuccessful();
 
     $dataset = base_path('database/eval-datasets/fixture-agent.json');
@@ -58,11 +57,11 @@ it('scaffolds a dataset and eval target from response logs', function (): void {
     expect(File::exists($target))->toBeTrue()
         ->and(File::get($target))->toContain("companyBrandTone: (string) (\$row['company_brand_tone'] ?? '')")
         ->and(File::get($target))->toContain("new LlmJudgeScorer(name: 'quality', rubric: 'Is the plan complete and on-brand?')")
-        ->and(File::get($target))->toContain('new NoHallucinatedUrlsScorer');
+        ->and(File::get($target))->toContain("new JsScorer(base_path('resources/ai/scorers/no-hallucinated-urls.js'))");
 
-    expect(File::exists(app_path('Ai/Eval/Scorers/NoHallucinatedUrlsScorer.php')))->toBeTrue()
-        ->and(substr_count(File::get($target), 'new NoHallucinatedUrlsScorer'))->toBe(1)
-        ->and(File::exists(app_path('Ai/Eval/Scorers/123bad.php')))->toBeFalse();
+    expect(File::exists(base_path('resources/ai/scorers/no-hallucinated-urls.js')))->toBeTrue()
+        ->and(substr_count(File::get($target), 'new JsScorer'))->toBe(1)
+        ->and(File::exists(base_path('resources/ai/scorers/123bad.js')))->toBeFalse();
 });
 
 it('fails softly when no agents are found', function (): void {
@@ -292,29 +291,6 @@ it('scaffolds match, range, and tool_routing scorer entries', function (): void 
         ->and($target)->toContain('new ToolRoutingScorer');
 });
 
-it('reuses an existing custom scorer class when the overwrite confirm is declined', function (): void {
-    $scorerPath = app_path('Ai/Eval/Scorers/NoHallucinatedUrlsScorer.php');
-    File::ensureDirectoryExists(dirname($scorerPath));
-    File::put($scorerPath, '<?php // existing custom scorer');
-
-    $this->artisan('ai:scaffold-eval')
-        ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
-        ->expectsQuestion('Which agent is this eval for?', FixtureAgent::class)
-        ->expectsQuestion('Eval key', 'fixture-agent')
-        ->expectsQuestion('Eval label', 'Fixture Agent')
-        ->expectsQuestion('Where should the test data come from?', 'skip')
-        ->expectsQuestion('Which built-in scorers should judge the answers?', [])
-        ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'NoHallucinatedUrlsScorer')
-        ->expectsQuestion('Where should the custom scorers run?', 'php')
-        ->expectsConfirmation('Overwrite existing NoHallucinatedUrlsScorer?', 'no')
-        ->assertSuccessful();
-
-    expect(File::get($scorerPath))->toBe('<?php // existing custom scorer');
-
-    $target = File::get(app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php'));
-    expect($target)->toContain('new NoHallucinatedUrlsScorer');
-});
-
 it('scaffolds js scorers and wires them into the target', function (): void {
     $this->artisan('ai:scaffold-eval')
         ->expectsQuestion('Which agent is this eval for?', 'FixtureAgent')
@@ -324,7 +300,6 @@ it('scaffolds js scorers and wires them into the target', function (): void {
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
         ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'No Hallucinated Urls, no-hallucinated-urls, 123')
-        ->expectsQuestion('Where should the custom scorers run?', 'js')
         ->assertSuccessful();
 
     // Deduped after slugging; numeric-only names are skipped like invalid PHP names.
@@ -351,7 +326,6 @@ it('reuses an existing js scorer file when the overwrite confirm is declined', f
         ->expectsQuestion('Where should the test data come from?', 'skip')
         ->expectsQuestion('Which built-in scorers should judge the answers?', [])
         ->expectsQuestion('Custom scorer names (comma-separated, blank for none)', 'no-hallucinated-urls')
-        ->expectsQuestion('Where should the custom scorers run?', 'js')
         ->expectsConfirmation('Overwrite existing no-hallucinated-urls.js?', 'no')
         ->assertSuccessful();
 
