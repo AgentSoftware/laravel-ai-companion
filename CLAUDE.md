@@ -52,7 +52,7 @@ Hard-won API facts (verified 2026-06, cost us production failures — keep these
 
 Three commands, one flow — scaffold → iterate offline → publish live:
 
-- `ai:scaffold-eval` — interactive wizard: pick an agent (auto-discovered), pull a dataset from Braintrust logs/datasets or `ai_response_logs`, pick scorers (built-in PHP, custom PHP stubs, and JS scorer stubs in `resources/ai/scorers/`), generate the `EvalTarget` (constructor reflection-mapped from row keys).
+- `ai:scaffold-eval` — interactive wizard: pick an agent (auto-discovered), pull a dataset from Braintrust logs/datasets or `ai_response_logs`, pick built-in scorers and name custom ones (always scaffolded as JS files in `resources/ai/scorers/`), generate the `EvalTarget` (constructor reflection-mapped from row keys).
 - `ai:eval <key>` (app-extended `RunEvalCommand`) — offline: replays dataset rows through the real agent, scores, pushes a Braintrust experiment. **Offline stays offline for JS scorers**: `Eval/Js/JsScorer` runs the file locally via Node (`scorer-runner.mjs`, Braintrust handler convention, 60s process timeout) with zero HTTP.
 - `ai:publish-eval` — THE publish boundary, and the only code path that writes scorers to Braintrust: interactively tick which JS scorers go live (PHP scorers can't be published — Braintrust can't run PHP), set sampling; per scorer upsert-function-by-slug (skip when code unchanged) → **smoke test in the real sandbox** (runtimes diverge — e.g. `AbortSignal.timeout` doesn't exist there) → upsert the online rule (reconciled by name `{key} (online)`).
 
