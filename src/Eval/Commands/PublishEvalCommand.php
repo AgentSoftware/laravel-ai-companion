@@ -10,6 +10,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 use function Laravel\Prompts\error;
@@ -99,16 +100,27 @@ class PublishEvalCommand extends Command
                 $id = $api->upsertFunction($slug, Str::headline($scorer->name()), $scorer->code());
 
                 // Smoke test in the REAL sandbox — local Node can diverge from it.
-                $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => [], 'expected' => null]);
+                // A scorer must return a numeric score; anything else (including a
+                // 200-wrapped sandbox error payload) fails the publish.
+                $result = $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => [], 'expected' => null]);
+
+                if (! is_numeric($result['score'] ?? null)) {
+                    throw new RuntimeException("{$scorer->name()}: sandbox smoke test returned no score — got ".json_encode($result));
+                }
+
                 info("{$scorer->name()}: synced and sandbox smoke test passed.");
 
                 return $id;
             });
 
+            // apply_to_span_names is an EXACT list and agent spans are named
+            // class_basename($agent) — cover both the bare studly key and the
+            // conventional Agent-suffixed class name (page-planner → PagePlanner
+            // + PagePlannerAgent). An unmatched extra name is harmless.
             $api->upsertOnlineRule(
                 name: "{$target->key()} (online)",
                 scorerIds: $ids->all(),
-                spanNames: [Str::studly($target->key())],
+                spanNames: [Str::studly($target->key()), Str::studly($target->key()).'Agent'],
                 samplingRate: $sample,
                 description: sprintf(
                     'Scores live %s spans with %s for "%s". Published from the app repo by ai:publish-eval — edit the JS there and re-publish, not here.',

@@ -56,9 +56,9 @@ Three commands, one flow — scaffold → iterate offline → publish live:
 - `ai:eval <key>` (app-extended `RunEvalCommand`) — offline: replays dataset rows through the real agent, scores, pushes a Braintrust experiment. **Offline stays offline for JS scorers**: `Eval/Js/JsScorer` runs the file locally via Node (`scorer-runner.mjs`, Braintrust handler convention, 60s process timeout) with zero HTTP.
 - `ai:publish-eval` — THE publish boundary, and the only code path that writes scorers to Braintrust: interactively tick which JS scorers go live (PHP scorers can't be published — Braintrust can't run PHP), set sampling; per scorer upsert-function-by-slug (skip when code unchanged) → **smoke test in the real sandbox** (runtimes diverge — e.g. `AbortSignal.timeout` doesn't exist there) → upsert the online rule (reconciled by name `{key} (online)`).
 
-Why live/online evals: offline runs gate changes before merge; online scoring catches production drift — every live agent span gets scored at ingest, so a bad prompt deploy or new failure mode shows as a falling score chartable/alertable in Braintrust. Score names are identical offline/online (JS file slug, snake_cased) so the charts line up.
+Why live/online evals: offline runs gate changes before merge; online scoring catches production drift — every live agent span gets scored at ingest, so a bad prompt deploy or new failure mode shows as a falling score chartable/alertable in Braintrust. Offline score names come from the JS file slug (snake_cased); verify the online score key on first publish before relying on chart alignment across the two.
 
-Gotcha: online rules match spans by deriving the agent span name from the target key (`page-planner` → ILIKE `%PagePlanner%` vs `class_basename($agent)`), so eval keys must stay derived from the agent class name.
+Gotcha: online rules match spans by EXACT name (`apply_to_span_names`); the publish command derives `[PagePlanner, PagePlannerAgent]` from the target key, so eval keys must stay derived from the agent class name (BTQL log pulls use ILIKE and are more forgiving).
 
 ## Conventions
 

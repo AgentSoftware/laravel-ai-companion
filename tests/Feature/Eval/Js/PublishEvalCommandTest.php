@@ -53,7 +53,7 @@ it('publishes selected js scorers and creates the online rule', function (): voi
         && $request['name'] === 'js-stub (online)'
         && $request['config']['online']['sampling_rate'] === 0.5
         && str_contains((string) $request['description'], 'my_check')
-        && $request['config']['online']['apply_to_span_names'] === ['JsStub']);
+        && $request['config']['online']['apply_to_span_names'] === ['JsStub', 'JsStubAgent']);
 });
 
 it('runs fully interactively', function (): void {
@@ -130,4 +130,18 @@ it('rejects an invalid sample rate before publishing anything', function (): voi
         ->assertFailed();
 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/v1/function'));
+});
+
+it('aborts when the sandbox smoke test returns no score', function (): void {
+    Http::fake([
+        'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
+        'api.braintrust.dev/v1/function?*' => Http::response(['objects' => []]),
+        'api.braintrust.dev/v1/function/fn-1/invoke' => Http::response(['error' => 'handler is not a function']),
+        'api.braintrust.dev/v1/function' => Http::response(['id' => 'fn-1']),
+    ]);
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => '1'])
+        ->assertFailed();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/v1/project_score'));
 });
