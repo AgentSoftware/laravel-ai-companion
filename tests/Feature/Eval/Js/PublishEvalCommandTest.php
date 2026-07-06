@@ -102,3 +102,15 @@ it('errors when no eval targets are configured', function (): void {
 
     $this->artisan('ai:publish-eval')->assertFailed();
 });
+
+it('drops unresolvable target classes and continues', function (): void {
+    fakePublishBraintrust();
+
+    config()->set('ai-companion.eval.targets', [
+        'Not\\A\\Real\\Class',
+        JsStubTarget::class,
+    ]);
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => '1'])
+        ->assertSuccessful();
+});
