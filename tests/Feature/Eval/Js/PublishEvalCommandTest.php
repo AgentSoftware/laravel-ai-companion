@@ -13,11 +13,15 @@ beforeEach(function (): void {
     config()->set('ai-companion.braintrust.api_key', 'test-key');
     config()->set('ai-companion.braintrust.project', 'my-project');
 
-    File::ensureDirectoryExists(base_path('resources/ai/scorers'));
-    File::put(base_path('resources/ai/scorers/my-check.js'), 'async function handler({ output }) { return { score: 1 }; }');
+    // A per-process temp dir, NOT base_path('resources/ai/scorers'): the
+    // scaffold command tests delete that directory in their beforeEach, and
+    // under --parallel the workers share the filesystem — a real CI flake.
+    $dir = sys_get_temp_dir().'/publish-eval-scorers-'.getmypid();
+    File::ensureDirectoryExists($dir);
+    File::put("{$dir}/my-check.js", 'async function handler({ output }) { return { score: 1 }; }');
 
     app()->bind(JsStubTarget::class, fn (): JsStubTarget => new JsStubTarget([
-        new JsScorer(base_path('resources/ai/scorers/my-check.js')),
+        new JsScorer("{$dir}/my-check.js"),
     ]));
 
     config()->set('ai-companion.eval.targets', [JsStubTarget::class]);
