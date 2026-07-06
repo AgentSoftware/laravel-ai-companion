@@ -253,6 +253,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Scorers\LlmJudgeScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\MatchScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\RangeScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ToolRoutingScorer;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ToolUsageScorer;
 
 public function scorers(): array
 {
@@ -260,6 +261,7 @@ public function scorers(): array
         new RangeScorer(name: 'length', field: 'summary', mode: 'words', min: 10, max: 60),
         new MatchScorer(name: 'topic', field: 'topic', expected: 'expected', mode: 'contains'),
         new ToolRoutingScorer(declinePhrase: 'outside my capabilities'),
+        new ToolUsageScorer(name: 'wrote_content', pattern: 'Write*'), // agent actually called tools, not just talked
         new LlmJudgeScorer(name: 'faithful', rubric: '10 = no invented facts …', input: 'input', output: 'summary'),
     ];
 }

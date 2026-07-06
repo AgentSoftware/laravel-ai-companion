@@ -17,6 +17,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Scorers\LlmJudgeScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\MatchScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\RangeScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ToolRoutingScorer;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ToolUsageScorer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -269,6 +270,22 @@ class ScaffoldEvalCommand extends Command
             return new ScorerEntry(code: 'new ToolRoutingScorer', imports: [ToolRoutingScorer::class]);
         }
 
+        if ($builtin === 'tool_usage') {
+            $pattern = text(
+                label: 'Tool name pattern (wildcard, blank = any tool)',
+                placeholder: 'e.g. Write*',
+                hint: 'The scorer passes when the agent called at least one tool matching this. Blank counts every tool.',
+                default: '',
+            );
+
+            return new ScorerEntry(
+                code: $pattern === ''
+                    ? 'new ToolUsageScorer'
+                    : sprintf('new ToolUsageScorer(pattern: %s)', var_export($pattern, true)),
+                imports: [ToolUsageScorer::class],
+            );
+        }
+
         // @codeCoverageIgnoreStart
         throw new LogicException("Unknown built-in scorer option: {$builtin}");
         // @codeCoverageIgnoreEnd
@@ -284,6 +301,7 @@ class ScaffoldEvalCommand extends Command
                 'llm_judge' => 'LlmJudgeScorer — an LLM grades each answer against a rubric you write (most flexible)',
                 'range' => 'RangeScorer — checks a field\'s length/count falls inside min–max bounds',
                 'tool_routing' => 'ToolRoutingScorer — checks the agent called the tools the row expected',
+                'tool_usage' => 'ToolUsageScorer — checks the agent actually called tools instead of just talking',
             ],
             hint: 'Scorers give each answer a 0–1 score. Space toggles, enter confirms; pick none if you only want custom scorers.',
         );
