@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Commands;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Js\JsScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\AgentDiscovery;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustDatasetSource;
@@ -311,8 +312,26 @@ class ScaffoldEvalCommand extends Command
 
         $invalid->each(fn (string $class) => warning("Skipping \"{$class}\" — not a valid class name."));
 
+        $js = text(
+            label: 'JS scorer names (comma-separated, blank for none)',
+            placeholder: 'e.g. no-hallucinated-urls, valid-slugs',
+            hint: 'JS scorers run locally during ai:eval and can later go live on real traffic with ai:publish-eval. Each name becomes resources/ai/scorers/<name>.js. Press enter to skip.',
+            default: '',
+        );
+
+        $jsSlugs = Str::of($js)
+            ->explode(',')
+            ->map(fn (string $name): string => Str::slug(trim($name), '-'))
+            ->filter()
+            ->unique();
+
+        [$validJs, $invalidJs] = $jsSlugs->partition(fn (string $slug): bool => (bool) preg_match('/^[a-z][a-z0-9-]*$/', $slug));
+
+        $invalidJs->each(fn (string $slug) => warning("Skipping \"{$slug}\" — not a valid scorer name."));
+
         return $builtinEntries
             ->merge($valid->map($this->customScorerEntry(...)))
+            ->merge($validJs->map($this->jsScorerEntry(...)))
             ->values()
             ->all();
     }
@@ -330,6 +349,24 @@ class ScaffoldEvalCommand extends Command
         }
 
         return new ScorerEntry(code: "new {$class}", imports: ["{$namespace}\\{$class}"]);
+    }
+
+    private function jsScorerEntry(string $slug): ScorerEntry
+    {
+        $relative = "resources/ai/scorers/{$slug}.js";
+        $path = base_path($relative);
+        $exists = File::exists($path);
+
+        if (! $exists || confirm("Overwrite existing {$slug}.js?", default: false)) {
+            File::ensureDirectoryExists(dirname($path));
+            File::put($path, str_replace('{{ name }}', $slug, (string) file_get_contents(dirname(__DIR__, 3).'/stubs/eval-js-scorer.stub')));
+            info(($exists ? 'Overwrote' : 'Created')." {$relative}");
+        }
+
+        return new ScorerEntry(
+            code: sprintf("new JsScorer(base_path('%s'))", $relative),
+            imports: [JsScorer::class],
+        );
     }
 
     /** @param array<int, ScorerEntry> $scorers */

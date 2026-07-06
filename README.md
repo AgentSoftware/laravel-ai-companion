@@ -338,6 +338,25 @@ Finish by registering the target in `config/ai-companion.php` under
 `eval.targets`. EU-pinned Braintrust orgs must set
 `BRAINTRUST_API_URL=https://api-eu.braintrust.dev`.
 
+### JS scorers — write once, run offline, publish online
+
+Self-contained checks (regex, URL validity, JSON shape) can be written as JS
+scorer files — versioned in your repo, run **fully locally** by `ai:eval`
+(via Node, zero Braintrust contact), and later published to score live
+traffic natively:
+
+```bash
+php artisan ai:scaffold-eval        # scaffolds resources/ai/scorers/<name>.js and wires it in
+php artisan ai:eval page-planner    # runs it locally — iterate freely
+php artisan ai:publish-eval         # interactively pick what goes live
+```
+
+`ai:publish-eval` syncs each selected scorer to Braintrust, smoke-tests it in
+the real sandbox, and creates/updates the online scoring rule for the
+target's spans. Unticked scorers never leave your repo; re-publishing
+reconciles the rule to exactly the ticked set. Requires `node` locally for
+offline runs.
+
 ### Swapping the exporter
 
 Results flow through the `ExperimentExporter` driver (`braintrust` by default). Register another from your app — no package change — and select it via config:
