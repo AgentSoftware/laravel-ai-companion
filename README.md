@@ -330,9 +330,9 @@ It will:
    `ai_response_logs` table into `database/eval-datasets/<key>.json`
    (`{"prompt": ..., "expected": ..., ...metadata}`).
 3. Let you pick built-in scorers (the LLM-judge rubric is asked for inline)
-   and name custom ones — you choose whether they scaffold as JS files in
-   `resources/ai/scorers/` (publishable online, see below) or PHP classes in
-   `app/Ai/Eval/Scorers/` (full app context, offline only).
+   and name custom ones — every custom scorer scaffolds as a JS file in
+   `resources/ai/scorers/` (any casing, normalised to a slug), runnable
+   offline and publishable online (see below).
 4. Generate `app/Ai/Eval/Targets/<Agent>EvalTarget.php` with the agent's
    constructor parameters mapped from dataset row keys.
 
