@@ -27,6 +27,10 @@ return [
         ],
     ],
 
+    'tool_call_logs' => [
+        'enabled' => env('AI_COMPANION_TOOL_CALL_LOGS_ENABLED', false),
+    ],
+
     'eval' => [
         // Experiment exporter driver. Ships with 'braintrust'; register more on
         // the ExperimentExporterManager (createXxxDriver / ::extend()).
