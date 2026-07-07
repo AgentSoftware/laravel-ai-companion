@@ -34,7 +34,9 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
 
     public function packageBooted(): void
     {
-        Event::listen(AgentPrompted::class, RecordAgentTokenUsage::class);
+        if (config('ai-companion.token_usage.enabled', true)) {
+            Event::listen(AgentPrompted::class, RecordAgentTokenUsage::class);
+        }
 
         $this->app->singleton(TokenUsageRepository::class);
 

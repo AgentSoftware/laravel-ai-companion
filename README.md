@@ -18,6 +18,12 @@ The package auto-registers itself.
 
 ## Token usage tracking
 
+Enabled by default — every prompt writes a row to `ai_token_usages`. If your app already tracks token usage itself, turn it off in the published config (`'token_usage' => ['enabled' => false]`) or via env:
+
+```env
+AI_COMPANION_TOKEN_USAGE_ENABLED=false
+```
+
 ```php
 use AgentSoftware\LaravelAiCompanion\Facades\AiUsage;
 
