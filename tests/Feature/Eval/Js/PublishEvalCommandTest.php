@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\Js\JsScorer;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\Js\JsSpanNamesStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\Js\JsStubTarget;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\File;
@@ -54,6 +55,23 @@ it('publishes selected js scorers and creates the online rule', function (): voi
         && $request['config']['online']['sampling_rate'] === 0.5
         && str_contains((string) $request['description'], 'my_check')
         && $request['config']['online']['apply_to_span_names'] === ['JsStub', 'JsStubAgent']);
+});
+
+it('uses a target span-names override for the online rule', function (): void {
+    fakePublishBraintrust();
+
+    $dir = sys_get_temp_dir().'/publish-eval-scorers-'.getmypid();
+    app()->bind(JsSpanNamesStubTarget::class, fn (): JsSpanNamesStubTarget => new JsSpanNamesStubTarget([
+        new JsScorer("{$dir}/my-check.js"),
+    ]));
+    config()->set('ai-companion.eval.targets', [JsSpanNamesStubTarget::class]);
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-span-stub', '--scorers' => 'my_check', '--sample' => '0.5'])
+        ->assertSuccessful();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/v1/project_score')
+        && $request['config']['online']['apply_to_span_names'] === ['CustomComposerAgent']);
 });
 
 it('runs fully interactively', function (): void {

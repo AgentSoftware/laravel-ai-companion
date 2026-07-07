@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion\Eval\Commands;
 
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasSpanNames;
 use AgentSoftware\LaravelAiCompanion\Eval\Js\JsScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
 use Illuminate\Console\Command;
@@ -116,15 +117,20 @@ class PublishEvalCommand extends Command
             // apply_to_span_names is an EXACT list and agent spans are named
             // class_basename($agent) — cover both the bare studly key and the
             // conventional Agent-suffixed class name (page-planner → PagePlanner
-            // + PagePlannerAgent). An unmatched extra name is harmless.
+            // + PagePlannerAgent). A target whose agent class doesn't follow that
+            // convention declares its own names via HasSpanNames.
+            $spanNames = $target instanceof HasSpanNames
+                ? $target->spanNames()
+                : [Str::studly($target->key()), Str::studly($target->key()).'Agent'];
+
             $api->upsertOnlineRule(
                 name: "{$target->key()} (online)",
                 scorerIds: $ids->all(),
-                spanNames: [Str::studly($target->key()), Str::studly($target->key()).'Agent'],
+                spanNames: $spanNames,
                 samplingRate: $sample,
                 description: sprintf(
                     'Scores live %s spans with %s for "%s". Published from the app repo by ai:publish-eval — edit the JS there and re-publish, not here.',
-                    Str::studly($target->key()),
+                    implode(', ', $spanNames),
                     $selected->map(fn (JsScorer $scorer): string => $scorer->name())->implode(', '),
                     $target->label(),
                 ),
@@ -140,7 +146,7 @@ class PublishEvalCommand extends Command
             $target->key(),
             $ids->count(),
             $sample * 100,
-            Str::studly($target->key()),
+            implode(', ', $spanNames),
         ));
 
         return self::SUCCESS;
