@@ -3,6 +3,13 @@
 declare(strict_types=1);
 
 return [
+    'token_usage' => [
+        // Disable to stop the global AgentPrompted listener writing a row to
+        // ai_token_usages for every prompt (e.g. when the app already tracks
+        // token usage itself).
+        'enabled' => env('AI_COMPANION_TOKEN_USAGE_ENABLED', true),
+    ],
+
     'response_logs' => [
         'prune_enabled' => env('AI_COMPANION_PRUNE_ENABLED', true),
         'prune_after_months' => env('AI_COMPANION_PRUNE_MONTHS', 6),
