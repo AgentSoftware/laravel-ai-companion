@@ -11,6 +11,9 @@ final class LaravelConcurrencyRunner implements ConcurrencyRunner
 {
     public function run(array $tasks): array
     {
-        return Concurrency::run($tasks);
+        // Pinned explicitly: falling back to the app's concurrency.default
+        // config would let a consumer's 'sync' default silently turn
+        // --concurrency into a no-op.
+        return Concurrency::driver('process')->run($tasks);
     }
 }

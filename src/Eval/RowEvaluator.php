@@ -24,7 +24,7 @@ use Throwable;
  * and holds no reference to the calling Command, so it can be invoked inside
  * a forked process by a ConcurrencyRunner.
  */
-final class RowEvaluator
+final readonly class RowEvaluator
 {
     /**
      * Tool results in the transcript are for judging what the agent did, not

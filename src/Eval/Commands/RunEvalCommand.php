@@ -39,6 +39,12 @@ use function Laravel\Prompts\warning;
  */
 abstract class RunEvalCommand extends Command
 {
+    /**
+     * Upper bound on --concurrency so a mistyped or overly ambitious value
+     * can't fire an entire large dataset at the provider in one batch.
+     */
+    private const int MAX_CONCURRENCY = 25;
+
     /** @var array<int, string> */
     private array $failures = [];
 
@@ -168,7 +174,7 @@ abstract class RunEvalCommand extends Command
         $rowEvaluator = new RowEvaluator;
         $provider = $this->option('provider');
         $model = $this->option('model');
-        $batchSize = max(1, (int) $this->option('concurrency'));
+        $batchSize = min(self::MAX_CONCURRENCY, max(1, (int) $this->option('concurrency')));
 
         $events = collect();
         $total = $runs->count();

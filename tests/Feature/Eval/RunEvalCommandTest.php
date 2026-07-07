@@ -261,6 +261,15 @@ it('batches runs into groups of --concurrency', function (): void {
     expect(RecordingConcurrencyRunner::$batchSizes)->toBe([3, 3, 1]);
 });
 
+it('caps --concurrency so one batch cannot fire the whole dataset at once', function (): void {
+    StructuredStubAgent::fake(array_fill(0, 30, ['name' => 'Batched']));
+    writeEvalDataset(array_map(fn (int $i): array => ['brief' => "row {$i}"], range(1, 30)));
+
+    $this->artisan('stub:eval', ['target' => 'stub', '--concurrency' => 1000])->assertSuccessful();
+
+    expect(max(RecordingConcurrencyRunner::$batchSizes))->toBeLessThanOrEqual(25);
+});
+
 it('captures failures from every row in a concurrent batch, not just the last', function (): void {
     writeEvalDataset([
         ['brief' => 'first row'],
