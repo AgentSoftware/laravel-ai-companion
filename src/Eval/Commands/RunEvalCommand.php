@@ -4,36 +4,26 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Commands;
 
-use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
-use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
-use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetadata;
-use AgentSoftware\LaravelAiCompanion\Eval\EvalRunMetrics;
-use AgentSoftware\LaravelAiCompanion\Eval\EvalSubject;
 use AgentSoftware\LaravelAiCompanion\Eval\Evaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
 use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
+use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluationResult;
+use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluator;
+use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
-use Laravel\Ai\Messages\AssistantMessage;
-use Laravel\Ai\Messages\Message;
-use Laravel\Ai\Messages\ToolResultMessage;
-use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\ToolResult;
-use Laravel\Ai\Responses\StructuredAgentResponse;
-use Laravel\Ai\Responses\TextResponse;
-use Throwable;
 
 use function Laravel\Prompts\error;
+use function Laravel\Prompts\info;
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\outro;
-use function Laravel\Prompts\progress;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\table;
 use function Laravel\Prompts\warning;
@@ -45,21 +35,14 @@ use function Laravel\Prompts\warning;
  * App-agnostic: the targets to run and the throwaway-world bootstrap come from
  * config (`ai-companion.eval.targets` and `ai-companion.eval.harness`). Extend
  * this command in the app and declare a signature carrying the target argument
- * plus the --dataset/--out/--provider/--model/--tag/--limit/--trials options.
+ * plus the --dataset/--out/--provider/--model/--tag/--limit/--trials/--concurrency options.
  */
 abstract class RunEvalCommand extends Command
 {
-    /**
-     * Tool results in the transcript are for judging what the agent did, not
-     * re-reading whole payloads — cap each one so a large API response doesn't
-     * swamp the judge's context.
-     */
-    private const int TRANSCRIPT_RESULT_LIMIT = 500;
-
     /** @var array<int, string> */
     private array $failures = [];
 
-    public function handle(ExperimentExporter $exporter): int
+    public function handle(ExperimentExporter $exporter, ConcurrencyRunner $concurrency): int
     {
         $harness = $this->harness();
 
@@ -92,12 +75,7 @@ abstract class RunEvalCommand extends Command
 
         intro(sprintf('%s · %d run(s)%s', $target->label(), $runs->count(), $this->option('model') ? ' · '.$this->option('model') : ''));
 
-        $events = collect(progress(
-            label: 'Scoring',
-            steps: $runs,
-            callback: fn (array $row): ?ExperimentEventData => $this->evaluateRow($row, $target, $evaluator, $harness),
-            hint: 'Calls the model once per row — not fast.',
-        ))->filter()->values();
+        $events = $this->runConcurrently($runs, $target, $evaluator, $harness, $concurrency);
 
         if ($this->failures !== []) {
             warning(count($this->failures).' run(s) failed:'.PHP_EOL.implode(PHP_EOL, $this->failures));
@@ -172,120 +150,62 @@ abstract class RunEvalCommand extends Command
     }
 
     /**
-     * @param  array<string, mixed>  $row
+     * Score every run, chunked into batches of `--concurrency` so each row's
+     * agent call, DB transaction, and scoring happen in its own forked
+     * process. Batches run one after another; rows within a batch run
+     * concurrently.
+     *
+     * @param  Collection<int, array<string, mixed>>  $runs
+     * @return Collection<int, ExperimentEventData>
      */
-    private function evaluateRow(array $row, EvalTarget $target, Evaluator $evaluator, EvalHarness $harness): ?ExperimentEventData
-    {
-        $input = $target->promptInput($row);
+    private function runConcurrently(
+        Collection $runs,
+        EvalTarget $target,
+        Evaluator $evaluator,
+        EvalHarness $harness,
+        ConcurrencyRunner $concurrency,
+    ): Collection {
+        $rowEvaluator = new RowEvaluator;
+        $provider = $this->option('provider');
+        $model = $this->option('model');
+        $batchSize = max(1, (int) $this->option('concurrency'));
 
-        // Bootstrap a throwaway world, run the real agent, score it — then roll
-        // everything back so the eval leaves no trace in the database.
-        DB::beginTransaction();
+        $events = collect();
+        $total = $runs->count();
+        $done = 0;
 
-        try {
-            $environment = $harness->boot($row);
+        foreach ($runs->chunk($batchSize) as $batch) {
+            // Multi-line, non-nested-on-one-line closures: opis/serializable-closure
+            // (used by Concurrency's process driver) resolves a closure's source by
+            // line range, and mis-extracts nested arrow functions declared on a
+            // single line.
+            $tasks = $batch
+                ->map(function (array $row) use ($rowEvaluator, $target, $evaluator, $harness, $provider, $model): Closure {
+                    return function () use ($rowEvaluator, $row, $target, $evaluator, $harness, $provider, $model): RowEvaluationResult {
+                        return $rowEvaluator->evaluate($row, $target, $evaluator, $harness, $provider, $model);
+                    };
+                })
+                ->values()
+                ->all();
 
-            $agent = $target->agent($environment, $row);
+            /** @var array<int, RowEvaluationResult> $results */
+            $results = $concurrency->run($tasks);
 
-            $attachments = $target instanceof HasPromptAttachments
-                ? $target->promptAttachments($row)
-                : [];
+            foreach ($results as $result) {
+                if ($result->event !== null) {
+                    $events->push($result->event);
+                }
 
-            $startedAt = microtime(true);
-            $response = $agent->prompt($input, $attachments, $this->option('provider'), $this->option('model'));
-            $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
+                if ($result->failure !== null) {
+                    $this->failures[] = $result->failure;
+                }
+            }
 
-            $meta = $response->meta;
-            $usage = $response->usage;
-            $loggable = $agent instanceof HasLoggableProperties ? $agent->loggableProperties() : [];
-
-            $toolCalls = $response->toolCalls->map(fn (ToolCall $call): string => $call->name)->values()->all();
-            $transcript = $this->transcript($response);
-
-            // Tool-using agents return a TextResponse with no structured payload —
-            // capture the reply text, the tools it chose, and (for multi-step
-            // runs) the transcript of what it did along the way.
-            $output = $response instanceof StructuredAgentResponse
-                ? $response->toArray()
-                : [
-                    'text' => $response->text,
-                    'tool_calls' => $toolCalls,
-                    ...($transcript === '' ? [] : ['transcript' => $transcript]),
-                ];
-
-            $subject = new EvalSubject($output, $harness->context($environment), [
-                ...$target->subjectInput($row),
-                'tool_calls' => $toolCalls,
-                'tool_call_details' => $response->toolCalls
-                    ->map(fn (ToolCall $call): array => ['name' => $call->name, 'arguments' => $call->arguments])
-                    ->values()
-                    ->all(),
-                'transcript' => $transcript,
-                'text' => $response->text,
-            ]);
-            $scores = $evaluator->evaluate($subject);
-
-            $promptName = $loggable['prompt_name'] ?? null;
-            $tags = $row['tags'] ?? null;
-
-            return new ExperimentEventData(
-                input: ['input' => $input],
-                output: $output,
-                scores: $scores,
-                metadata: new EvalRunMetadata(
-                    promptName: is_string($promptName) ? $promptName : null,
-                    promptVersion: $this->scalarOrNull($loggable['prompt_version'] ?? null),
-                    model: $meta->model,
-                    provider: $meta->provider,
-                    tags: is_array($tags) ? array_values(array_filter($tags, 'is_string')) : [],
-                ),
-                metrics: new EvalRunMetrics(
-                    latencyMs: $latencyMs,
-                    promptTokens: $usage->promptTokens,
-                    completionTokens: $usage->completionTokens,
-                    tokens: $usage->promptTokens + $usage->completionTokens,
-                ),
-                expected: is_array($row['expected'] ?? null) ? $row['expected'] : null,
-            );
-        } catch (Throwable $exception) {
-            $this->failures[] = sprintf('%s — %s', Str::limit($input, 40), $exception->getMessage());
-
-            return null;
-        } finally {
-            DB::rollBack();
+            $done += $batch->count();
+            info("Scored {$done}/{$total}");
         }
-    }
 
-    private function scalarOrNull(mixed $value): int|string|null
-    {
-        return is_int($value) || is_string($value) ? $value : null;
-    }
-
-    /**
-     * Flatten the agent's message history — narration, tool calls with their
-     * arguments, and truncated tool results — into a judge-readable transcript
-     * of what a multi-step run actually did.
-     */
-    private function transcript(TextResponse $response): string
-    {
-        return $response->messages
-            ->flatMap(fn (Message $message): array => match (true) {
-                $message instanceof AssistantMessage => collect([trim($message->content ?? '')])
-                    ->filter()
-                    ->merge($message->toolCalls->map(
-                        fn (ToolCall $call): string => sprintf('[tool] %s %s', $call->name, json_encode($call->arguments)),
-                    ))
-                    ->all(),
-                $message instanceof ToolResultMessage => $message->toolResults
-                    ->map(fn (ToolResult $result): string => sprintf(
-                        '[result] %s %s',
-                        $result->name,
-                        Str::limit((string) json_encode($result->result), self::TRANSCRIPT_RESULT_LIMIT),
-                    ))
-                    ->all(),
-                default => [],
-            })
-            ->implode("\n");
+        return $events;
     }
 
     /**

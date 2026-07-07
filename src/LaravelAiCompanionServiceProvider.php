@@ -6,8 +6,10 @@ namespace AgentSoftware\LaravelAiCompanion;
 
 use AgentSoftware\LaravelAiCompanion\Eval\Commands\PublishEvalCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScaffoldEvalCommand;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
+use AgentSoftware\LaravelAiCompanion\Eval\LaravelConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
@@ -55,6 +57,8 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
             ExperimentExporter::class,
             fn (Application $app): ExperimentExporter => $app->make(ExperimentExporterManager::class)->driver(),
         );
+
+        $this->app->bind(ConcurrencyRunner::class, LaravelConcurrencyRunner::class);
 
         if (config('ai-companion.braintrust.enabled')) {
             Event::subscribe(ExportTrace::class);
