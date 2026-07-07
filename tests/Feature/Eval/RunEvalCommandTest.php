@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\AttachmentStubTarget;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\CapturingScorer;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StructuredStubAgent;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StructuredStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StubEvalCommand;
@@ -10,12 +11,20 @@ use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StubHarness;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\TextStubAgent;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\TextStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ThrowStubTarget;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ToolStubAgent;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ToolStubTarget;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
+use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\TextResponse;
 
 beforeEach(function (): void {
     config()->set('ai-companion.eval.harness', StubHarness::class);
@@ -114,6 +123,52 @@ it('captures tool calls and reply text for a text target', function (): void {
     expect($row['output']['tool_calls'])->toContain('FooTool')
         ->and((float) $row['scores']['routing'])->toBe(1.0)
         ->and($row['metadata']['prompt_version'])->toBeNull();
+
+    File::delete($out);
+});
+
+it('builds a transcript with tool arguments and truncated results', function (): void {
+    config()->set('ai-companion.eval.targets', [ToolStubTarget::class]);
+
+    CapturingScorer::$subject = null;
+    ToolStubAgent::fake([new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA']), 'all done']);
+    writeEvalDataset([['brief' => 'look up the property']]);
+
+    $out = sys_get_temp_dir().'/stub-transcript.ndjson';
+
+    $this->artisan('stub:eval', ['target' => 'stub-tool', '--out' => $out])->assertSuccessful();
+
+    $transcript = readNdjson($out)[0]['output']['transcript'];
+
+    expect($transcript)->toContain('[tool] LookupStubTool {"postcode":"SW1A 1AA"}')
+        ->and($transcript)->toContain('[result] LookupStubTool')
+        ->and($transcript)->not->toContain(str_repeat('x', 501))
+        ->and(CapturingScorer::$subject->input['transcript'])->toBe($transcript)
+        ->and(CapturingScorer::$subject->input['tool_call_details'])->toBe([
+            ['name' => 'LookupStubTool', 'arguments' => ['postcode' => 'SW1A 1AA']],
+        ]);
+
+    File::delete($out);
+});
+
+it('skips non-assistant messages and omits the transcript when empty', function (): void {
+    $withUserMessage = (new TextResponse('done', new Usage, new Meta('anthropic', 'test')))
+        ->withMessages(new Collection([
+            new UserMessage('do a foo'),
+            new AssistantMessage('Looking that up now.'),
+        ]));
+
+    TextStubAgent::fake([$withUserMessage, 'plain reply']);
+    writeEvalDataset([['brief' => 'do a foo'], ['brief' => 'no tools']]);
+
+    $out = sys_get_temp_dir().'/stub-messages.ndjson';
+
+    $this->artisan('stub:eval', ['target' => 'stub-text', '--out' => $out])->assertSuccessful();
+
+    [$narrated, $plain] = readNdjson($out);
+
+    expect($narrated['output']['transcript'])->toBe('Looking that up now.')
+        ->and($plain['output'])->not->toHaveKey('transcript');
 
     File::delete($out);
 });

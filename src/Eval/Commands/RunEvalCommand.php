@@ -21,8 +21,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\Message;
+use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\StructuredAgentResponse;
+use Laravel\Ai\Responses\TextResponse;
 use Throwable;
 
 use function Laravel\Prompts\error;
@@ -44,6 +49,13 @@ use function Laravel\Prompts\warning;
  */
 abstract class RunEvalCommand extends Command
 {
+    /**
+     * Tool results in the transcript are for judging what the agent did, not
+     * re-reading whole payloads — cap each one so a large API response doesn't
+     * swamp the judge's context.
+     */
+    private const int TRANSCRIPT_RESULT_LIMIT = 500;
+
     /** @var array<int, string> */
     private array $failures = [];
 
@@ -188,16 +200,27 @@ abstract class RunEvalCommand extends Command
             $loggable = $agent instanceof HasLoggableProperties ? $agent->loggableProperties() : [];
 
             $toolCalls = $response->toolCalls->map(fn (ToolCall $call): string => $call->name)->values()->all();
+            $transcript = $this->transcript($response);
 
             // Tool-using agents return a TextResponse with no structured payload —
-            // capture the reply text and the tools it chose.
+            // capture the reply text, the tools it chose, and (for multi-step
+            // runs) the transcript of what it did along the way.
             $output = $response instanceof StructuredAgentResponse
                 ? $response->toArray()
-                : ['text' => $response->text, 'tool_calls' => $toolCalls];
+                : [
+                    'text' => $response->text,
+                    'tool_calls' => $toolCalls,
+                    ...($transcript === '' ? [] : ['transcript' => $transcript]),
+                ];
 
             $subject = new EvalSubject($output, $harness->context($environment), [
                 ...$target->subjectInput($row),
                 'tool_calls' => $toolCalls,
+                'tool_call_details' => $response->toolCalls
+                    ->map(fn (ToolCall $call): array => ['name' => $call->name, 'arguments' => $call->arguments])
+                    ->values()
+                    ->all(),
+                'transcript' => $transcript,
                 'text' => $response->text,
             ]);
             $scores = $evaluator->evaluate($subject);
@@ -236,6 +259,33 @@ abstract class RunEvalCommand extends Command
     private function scalarOrNull(mixed $value): int|string|null
     {
         return is_int($value) || is_string($value) ? $value : null;
+    }
+
+    /**
+     * Flatten the agent's message history — narration, tool calls with their
+     * arguments, and truncated tool results — into a judge-readable transcript
+     * of what a multi-step run actually did.
+     */
+    private function transcript(TextResponse $response): string
+    {
+        return $response->messages
+            ->flatMap(fn (Message $message): array => match (true) {
+                $message instanceof AssistantMessage => collect([trim($message->content ?? '')])
+                    ->filter()
+                    ->merge($message->toolCalls->map(
+                        fn (ToolCall $call): string => sprintf('[tool] %s %s', $call->name, json_encode($call->arguments)),
+                    ))
+                    ->all(),
+                $message instanceof ToolResultMessage => $message->toolResults
+                    ->map(fn (ToolResult $result): string => sprintf(
+                        '[result] %s %s',
+                        $result->name,
+                        Str::limit((string) json_encode($result->result), self::TRANSCRIPT_RESULT_LIMIT),
+                    ))
+                    ->all(),
+                default => [],
+            })
+            ->implode("\n");
     }
 
     /**
