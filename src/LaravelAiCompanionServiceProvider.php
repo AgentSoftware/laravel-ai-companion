@@ -9,6 +9,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScaffoldEvalCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
+use AgentSoftware\LaravelAiCompanion\Listeners\RecordAiToolCall;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
 use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\TraceExporterManager;
@@ -56,6 +57,10 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
 
         if (config('ai-companion.braintrust.enabled')) {
             Event::subscribe(ExportTrace::class);
+        }
+
+        if (config('ai-companion.tool_call_logs.enabled')) {
+            Event::subscribe(RecordAiToolCall::class);
         }
 
         if (config('ai-companion.response_logs.prune_enabled')) {

@@ -99,3 +99,23 @@ it('never throws when tool call recording fails', function () {
 
     expect(AiToolCall::count())->toBe(1);
 });
+
+it('does not record tool calls when the feature flag is disabled', function () {
+    AiResponseLog::create([
+        'invocation_id' => 'inv-disabled',
+        'agent' => 'App\\Agents\\ExampleAgent',
+        'prompt' => 'hi',
+        'status' => AiResponseStatus::Success,
+    ]);
+
+    event(new ToolInvoked(
+        invocationId: 'inv-disabled',
+        toolInvocationId: 'tool-disabled',
+        agent: makeTracingAgent(),
+        tool: Mockery::mock(Tool::class),
+        arguments: [],
+        result: 'ok',
+    ));
+
+    expect(AiToolCall::count())->toBe(0);
+});
