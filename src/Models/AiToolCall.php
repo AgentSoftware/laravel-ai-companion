@@ -21,8 +21,6 @@ class AiToolCall extends Model
 {
     use HasUuids;
 
-    protected $table = 'ai_tool_calls';
-
     protected $fillable = [
         'ai_response_log_id',
         'tool_invocation_id',

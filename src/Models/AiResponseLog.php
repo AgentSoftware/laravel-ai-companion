@@ -27,8 +27,6 @@ class AiResponseLog extends Model
     use HasUuids;
     use MassPrunable;
 
-    protected $table = 'ai_response_logs';
-
     protected $fillable = [
         'invocation_id',
         'agent',
