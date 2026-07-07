@@ -213,6 +213,11 @@ abstract class RunEvalCommand extends Command
                     ...($transcript === '' ? [] : ['transcript' => $transcript]),
                 ];
 
+            $firstStep = $response->steps->first();
+            $firstStepToolCalls = $firstStep === null
+                ? []
+                : array_values(array_map(fn (ToolCall $call): string => $call->name, $firstStep->toolCalls));
+
             $subject = new EvalSubject($output, $harness->context($environment), [
                 ...$target->subjectInput($row),
                 'tool_calls' => $toolCalls,
@@ -221,6 +226,7 @@ abstract class RunEvalCommand extends Command
                     ->values()
                     ->all(),
                 'transcript' => $transcript,
+                'first_step_tool_calls' => $firstStepToolCalls,
                 'text' => $response->text,
             ]);
             $scores = $evaluator->evaluate($subject);
