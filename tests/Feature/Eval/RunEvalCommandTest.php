@@ -25,7 +25,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
@@ -154,6 +156,51 @@ it('builds a transcript with tool arguments and truncated results', function ():
         ->and(CapturingScorer::$subject->input['tool_call_details'])->toBe([
             ['name' => 'LookupStubTool', 'arguments' => ['postcode' => 'SW1A 1AA']],
         ]);
+
+    File::delete($out);
+});
+
+it('captures the first step tool calls when the agent reports steps', function (): void {
+    config()->set('ai-companion.eval.targets', [ToolStubTarget::class]);
+
+    CapturingScorer::$subject = null;
+
+    $firstStep = new Step(
+        text: '',
+        toolCalls: [new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA'])],
+        toolResults: [],
+        finishReason: FinishReason::ToolCalls,
+        usage: new Usage,
+        meta: new Meta('anthropic', 'test'),
+    );
+
+    $withSteps = (new TextResponse('all done', new Usage, new Meta('anthropic', 'test')))
+        ->withSteps(new Collection([$firstStep]));
+
+    ToolStubAgent::fake([$withSteps]);
+    writeEvalDataset([['brief' => 'look up the property']]);
+
+    $out = sys_get_temp_dir().'/stub-first-step.ndjson';
+
+    $this->artisan('stub:eval', ['target' => 'stub-tool', '--out' => $out])->assertSuccessful();
+
+    expect(CapturingScorer::$subject->input['first_step_tool_calls'])->toBe(['LookupStubTool']);
+
+    File::delete($out);
+});
+
+it('reports no first step tool calls when the agent reports no steps', function (): void {
+    config()->set('ai-companion.eval.targets', [ToolStubTarget::class]);
+
+    CapturingScorer::$subject = null;
+    ToolStubAgent::fake(['no steps reported']);
+    writeEvalDataset([['brief' => 'look up the property']]);
+
+    $out = sys_get_temp_dir().'/stub-no-steps.ndjson';
+
+    $this->artisan('stub:eval', ['target' => 'stub-tool', '--out' => $out])->assertSuccessful();
+
+    expect(CapturingScorer::$subject->input['first_step_tool_calls'])->toBe([]);
 
     File::delete($out);
 });
