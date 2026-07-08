@@ -40,10 +40,15 @@ final readonly class JsScorer implements Scorer
 
     public function score(EvalSubject $subject): Score
     {
+        // Braintrust's real online scoring passes {input, output, expected,
+        // metadata, trace} — offline runs have no separate metadata concept,
+        // so mirror the subject's input under `metadata` too, keeping this
+        // local run consistent with what a published scorer sees live.
         $payload = json_encode([
             'output' => $subject->output,
             'input' => $subject->input,
             'expected' => $subject->input['expected'] ?? null,
+            'metadata' => $subject->input,
         ], JSON_THROW_ON_ERROR);
 
         $result = Process::input($payload)

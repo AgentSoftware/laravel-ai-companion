@@ -33,6 +33,21 @@ it('scores via the node runner and parses the result', function (): void {
         && str_contains((string) $process->input, '"output"'));
 });
 
+it('mirrors the subject input under metadata so scorers see the same shape as a live span', function (): void {
+    Process::fake(['*' => Process::result(output: '{"score":1}')]);
+
+    (new JsScorer(jsScorerFixture()))->score(new EvalSubject(
+        output: ['text' => 'good'],
+        input: ['first_step_tool_calls' => ['WriteTextTool']],
+    ));
+
+    Process::assertRan(function (PendingProcess $process): bool {
+        $payload = json_decode((string) $process->input, true);
+
+        return $payload['metadata']['first_step_tool_calls'] === ['WriteTextTool'];
+    });
+});
+
 it('accepts a bare number result and clamps out-of-range scores', function (): void {
     Process::fake(['*' => Process::result(output: '7')]);
 

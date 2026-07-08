@@ -102,7 +102,7 @@ class PublishEvalCommand extends Command
                 // Smoke test in the REAL sandbox — local Node can diverge from it.
                 // A scorer must return a numeric score; anything else (including a
                 // 200-wrapped sandbox error payload) fails the publish.
-                $result = $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => [], 'expected' => null]);
+                $result = $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => [], 'expected' => null, 'metadata' => []]);
 
                 if (! is_numeric($result['score'] ?? null)) {
                     throw new RuntimeException("{$scorer->name()}: sandbox smoke test returned no score — got ".json_encode($result));
