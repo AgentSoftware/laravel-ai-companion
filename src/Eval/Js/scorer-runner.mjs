@@ -1,7 +1,7 @@
 // Runs a Braintrust-convention scorer file locally: the file defines
-// `function handler({ output, input, expected, metadata })` (no export), we
-// feed the payload from stdin and print the result as JSON. Mirrors how
-// Braintrust's sandbox calls the same file once published.
+// `function handler({ output, input, expected })` (no export), we feed the
+// payload from stdin and print the result as JSON. Mirrors how Braintrust's
+// sandbox calls the same file once published.
 import { readFileSync } from "node:fs";
 
 const file = process.argv[2];
