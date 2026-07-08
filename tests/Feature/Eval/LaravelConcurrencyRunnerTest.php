@@ -3,15 +3,15 @@
 declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\LaravelConcurrencyRunner;
-use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ArithmeticTask;
+use Illuminate\Support\Facades\Concurrency;
 
-it('runs tasks via the process driver and returns their results in order', function (): void {
-    $runner = new LaravelConcurrencyRunner;
+it('delegates to the process driver explicitly, not whatever the app defaults to', function (): void {
+    $driver = Mockery::mock();
+    $driver->shouldReceive('run')->once()->andReturn(['a', 'b']);
 
-    $results = $runner->run([
-        ArithmeticTask::double(...),
-        ArithmeticTask::quadruple(...),
-    ]);
+    Concurrency::shouldReceive('driver')->once()->with('process')->andReturn($driver);
 
-    expect($results)->toBe([2, 4]);
+    $tasks = [fn (): int => 1, fn (): int => 2];
+
+    expect((new LaravelConcurrencyRunner)->run($tasks))->toBe(['a', 'b']);
 });
