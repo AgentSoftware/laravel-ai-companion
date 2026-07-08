@@ -6,6 +6,7 @@ use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Middleware\LogAiResponse;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
+use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
 use Illuminate\Broadcasting\Channel;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
@@ -212,4 +213,25 @@ it('writes a running row before the agent returns', function () {
     });
 
     expect(AiResponseLog::first()->status)->toBe(AiResponseStatus::Success);
+});
+
+it('registers the log against the agent instance before the run completes, for tool-call correlation', function () {
+    $middleware = new LogAiResponse;
+    $prompt = makeMiddlewarePrompt();
+    $agent = $prompt->agent;
+
+    $middleware->handle($prompt, function () use ($agent) {
+        $log = AiResponseLog::first();
+
+        expect(app(PendingAiResponseLogs::class)->get($agent))->toBe($log->id);
+
+        return new AgentResponse(
+            invocationId: 'inv-5',
+            text: 'done',
+            usage: makeUsage(),
+            meta: new Meta,
+        );
+    });
+
+    expect(app(PendingAiResponseLogs::class)->get($agent))->toBeNull();
 });

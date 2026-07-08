@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Listeners;
 
-use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Models\AiToolCall;
+use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
 use AgentSoftware\LaravelAiCompanion\Tracing\TraceTimings;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\ToolInvoked;
@@ -14,6 +14,7 @@ readonly class RecordAiToolCall
 {
     public function __construct(
         private TraceTimings $timings,
+        private PendingAiResponseLogs $pending,
     ) {}
 
     /**
@@ -37,9 +38,9 @@ readonly class RecordAiToolCall
         rescue(function () use ($event): void {
             $startedAt = $this->timings->pull("tool_call:{$event->toolInvocationId}");
 
-            $log = AiResponseLog::where('invocation_id', $event->invocationId)->first();
+            $logId = $this->pending->get($event->agent);
 
-            if ($log === null) {
+            if ($logId === null) {
                 return;
             }
 
@@ -48,7 +49,7 @@ readonly class RecordAiToolCall
                 : null;
 
             AiToolCall::create([
-                'ai_response_log_id' => $log->id,
+                'ai_response_log_id' => $logId,
                 'tool_invocation_id' => $event->toolInvocationId,
                 'tool' => $event->tool::class,
                 'input' => $event->arguments,

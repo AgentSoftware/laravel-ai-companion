@@ -7,7 +7,9 @@ namespace AgentSoftware\LaravelAiCompanion\Middleware;
 use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
+use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
 use Closure;
+use Illuminate\Container\Container;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
@@ -28,12 +30,24 @@ class LogAiResponse
             'status' => AiResponseStatus::Running,
         ]);
 
+        // AgentResponse only carries the invocation ID once the whole run
+        // finishes, but tool-call events fire mid-run. Register this row
+        // against the Agent instance now so RecordAiToolCall can resolve it
+        // before the run completes. Resolved from the container (not
+        // constructor-injected) because agents construct this middleware
+        // directly with `new LogAiResponse`.
+        $pending = Container::getInstance()->make(PendingAiResponseLogs::class);
+
+        $pending->put($agent, $log->id);
+
         $startedAt = microtime(true);
 
         try {
             /** @var AgentResponse $response */
             $response = $next($prompt);
         } catch (Throwable $e) {
+            $pending->forget($agent);
+
             $log->update([
                 'status' => AiResponseStatus::Failure,
                 'duration_ms' => (int) ((microtime(true) - $startedAt) * 1000),
@@ -42,7 +56,9 @@ class LogAiResponse
             throw $e;
         }
 
-        return $response->then(function (AgentResponse $response) use ($log, $startedAt): void {
+        return $response->then(function (AgentResponse $response) use ($agent, $log, $startedAt, $pending): void {
+            $pending->forget($agent);
+
             $log->update([
                 'invocation_id' => $response->invocationId,
                 'response' => $response instanceof StructuredAgentResponse

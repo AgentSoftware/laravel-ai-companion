@@ -6,6 +6,7 @@ use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAiToolCall;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Models\AiToolCall;
+use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Events\InvokingTool;
@@ -21,24 +22,27 @@ function subscribeToolCallLogging(): void
 it('records a tool call linked to its response log', function () {
     subscribeToolCallLogging();
 
+    $agent = makeTracingAgent();
+
     $log = AiResponseLog::create([
-        'invocation_id' => 'inv-1',
         'agent' => 'App\\Agents\\ExampleAgent',
         'prompt' => 'hi',
-        'status' => AiResponseStatus::Success,
+        'status' => AiResponseStatus::Running,
     ]);
+
+    app(PendingAiResponseLogs::class)->put($agent, $log->id);
 
     event(new InvokingTool(
         invocationId: 'inv-1',
         toolInvocationId: 'tool-1',
-        agent: makeTracingAgent(),
+        agent: $agent,
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
     ));
     event(new ToolInvoked(
         invocationId: 'inv-1',
         toolInvocationId: 'tool-1',
-        agent: makeTracingAgent(),
+        agent: $agent,
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
         result: 'ok',
@@ -72,12 +76,15 @@ it('skips silently when no matching response log exists', function () {
 it('never throws when tool call recording fails', function () {
     subscribeToolCallLogging();
 
+    $agent = makeTracingAgent();
+
     $log = AiResponseLog::create([
-        'invocation_id' => 'inv-x',
         'agent' => 'App\\Agents\\ExampleAgent',
         'prompt' => 'hi',
-        'status' => AiResponseStatus::Success,
+        'status' => AiResponseStatus::Running,
     ]);
+
+    app(PendingAiResponseLogs::class)->put($agent, $log->id);
 
     // Pre-existing row with the same tool_invocation_id trips the unique
     // constraint, forcing the listener's create() to throw internally.
@@ -91,7 +98,7 @@ it('never throws when tool call recording fails', function () {
     event(new ToolInvoked(
         invocationId: 'inv-x',
         toolInvocationId: 'tool-dupe',
-        agent: makeTracingAgent(),
+        agent: $agent,
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'y'],
         result: 'ok',
@@ -101,17 +108,20 @@ it('never throws when tool call recording fails', function () {
 });
 
 it('does not record tool calls when the feature flag is disabled', function () {
-    AiResponseLog::create([
-        'invocation_id' => 'inv-disabled',
+    $agent = makeTracingAgent();
+
+    $log = AiResponseLog::create([
         'agent' => 'App\\Agents\\ExampleAgent',
         'prompt' => 'hi',
-        'status' => AiResponseStatus::Success,
+        'status' => AiResponseStatus::Running,
     ]);
+
+    app(PendingAiResponseLogs::class)->put($agent, $log->id);
 
     event(new ToolInvoked(
         invocationId: 'inv-disabled',
         toolInvocationId: 'tool-disabled',
-        agent: makeTracingAgent(),
+        agent: $agent,
         tool: Mockery::mock(Tool::class),
         arguments: [],
         result: 'ok',

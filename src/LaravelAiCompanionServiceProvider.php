@@ -43,6 +43,8 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
 
         $this->app->singleton(TraceTimings::class);
 
+        $this->app->singleton(PendingAiResponseLogs::class);
+
         $this->app->singleton(TraceExporterManager::class);
 
         $this->app->bind(
