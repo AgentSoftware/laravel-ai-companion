@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion\Tracing;
 
 use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Ramsey\Uuid\Uuid;
 
@@ -44,7 +47,13 @@ class SpanBuilder
                 'model' => $event->response->meta->model ?? $event->prompt->model,
                 'provider' => $event->response->meta->provider,
                 'failovers' => $failovers !== [] ? $failovers : null,
-            ])),
+            ]), [
+                // Not run through array_filter above — an empty array here is
+                // meaningful (the agent called no tools at all) and must not
+                // be silently stripped like the null-coalesced fields are.
+                'tool_calls' => $this->toolCallNames($event->response->toolCalls),
+                'first_step_tool_calls' => $this->firstStepToolCallNames($event->response->steps),
+            ]),
             'metrics' => [
                 'start' => $startedAt,
                 'end' => $endedAt,
@@ -113,6 +122,34 @@ class SpanBuilder
             'metadata' => $this->baseMetadata(),
             'metrics' => [],
         ];
+    }
+
+    /**
+     * @param  Collection<int, ToolCall>  $toolCalls
+     * @return array<int, string>
+     */
+    private function toolCallNames(Collection $toolCalls): array
+    {
+        return $toolCalls->map(fn (ToolCall $call): string => $call->name)->values()->all();
+    }
+
+    /**
+     * Names of the tools called in the FIRST completion of a multi-step run —
+     * lets a scorer detect an agent that stalls on turn one without calling
+     * any tool at all, even if it recovers on a later step.
+     *
+     * @param  Collection<int, Step>  $steps
+     * @return array<int, string>
+     */
+    private function firstStepToolCallNames(Collection $steps): array
+    {
+        $firstStep = $steps->first();
+
+        if ($firstStep === null) {
+            return [];
+        }
+
+        return array_values(array_map(fn (ToolCall $call): string => $call->name, $firstStep->toolCalls));
     }
 
     private function rootId(): ?string
