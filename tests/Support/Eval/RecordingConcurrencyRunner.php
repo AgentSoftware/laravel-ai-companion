@@ -21,7 +21,7 @@ class RecordingConcurrencyRunner implements ConcurrencyRunner
         self::$batchSizes = [];
     }
 
-    public function run(array $tasks): array
+    public function run(array $tasks, int $timeout): array
     {
         self::$batchSizes[] = count($tasks);
 

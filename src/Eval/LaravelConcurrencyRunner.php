@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\Concurrency;
 
 final class LaravelConcurrencyRunner implements ConcurrencyRunner
 {
-    public function run(array $tasks): array
+    public function run(array $tasks, int $timeout): array
     {
         // Pinned explicitly: falling back to the app's concurrency.default
         // config would let a consumer's 'sync' default silently turn
         // --concurrency into a no-op.
-        return Concurrency::driver('process')->run($tasks);
+        return Concurrency::driver('process')->run($tasks, $timeout);
     }
 }

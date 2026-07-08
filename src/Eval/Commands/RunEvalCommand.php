@@ -35,7 +35,7 @@ use function Laravel\Prompts\warning;
  * App-agnostic: the targets to run and the throwaway-world bootstrap come from
  * config (`ai-companion.eval.targets` and `ai-companion.eval.harness`). Extend
  * this command in the app and declare a signature carrying the target argument
- * plus the --dataset/--out/--provider/--model/--tag/--limit/--trials/--concurrency options.
+ * plus the --dataset/--out/--provider/--model/--tag/--limit/--trials/--concurrency/--timeout options.
  */
 abstract class RunEvalCommand extends Command
 {
@@ -44,6 +44,13 @@ abstract class RunEvalCommand extends Command
      * can't fire an entire large dataset at the provider in one batch.
      */
     private const int MAX_CONCURRENCY = 25;
+
+    /**
+     * Default per-row timeout (seconds) for a forked concurrent process.
+     * Multi-step tool-using agent calls routinely take longer than the
+     * 60s Symfony Process default, especially once several run at once.
+     */
+    private const int DEFAULT_TIMEOUT = 300;
 
     /** @var array<int, string> */
     private array $failures = [];
@@ -175,6 +182,7 @@ abstract class RunEvalCommand extends Command
         $provider = $this->option('provider');
         $model = $this->option('model');
         $batchSize = min(self::MAX_CONCURRENCY, max(1, (int) $this->option('concurrency')));
+        $timeout = $this->option('timeout') !== null ? max(1, (int) $this->option('timeout')) : self::DEFAULT_TIMEOUT;
 
         $events = collect();
         $total = $runs->count();
@@ -185,17 +193,33 @@ abstract class RunEvalCommand extends Command
             // (used by Concurrency's process driver) resolves a closure's source by
             // line range, and mis-extracts nested arrow functions declared on a
             // single line.
+            // Return value is base64-encoded before it crosses the fork boundary:
+            // Laravel's process-based Concurrency driver pipes each child's stdout
+            // back as a single byte stream, and a multi-byte UTF-8 character split
+            // across a pipe-read chunk boundary corrupts the length-prefixed string
+            // inside PHP's serialize() format, breaking unserialize() on the parent
+            // side. Agent replies routinely contain multi-byte text (curly quotes,
+            // checkmarks, em dashes), so this isn't an edge case — base64 keeps the
+            // wire bytes ASCII-only regardless of how the pipe chunks them.
             $tasks = $batch
                 ->map(function (array $row) use ($rowEvaluator, $target, $evaluator, $harness, $provider, $model): Closure {
-                    return function () use ($rowEvaluator, $row, $target, $evaluator, $harness, $provider, $model): RowEvaluationResult {
-                        return $rowEvaluator->evaluate($row, $target, $evaluator, $harness, $provider, $model);
+                    return function () use ($rowEvaluator, $row, $target, $evaluator, $harness, $provider, $model): string {
+                        $result = $rowEvaluator->evaluate($row, $target, $evaluator, $harness, $provider, $model);
+
+                        return base64_encode(serialize($result));
                     };
                 })
                 ->values()
                 ->all();
 
+            /** @var array<int, string> $encoded */
+            $encoded = $concurrency->run($tasks, $timeout);
+
             /** @var array<int, RowEvaluationResult> $results */
-            $results = $concurrency->run($tasks);
+            $results = array_map(
+                fn (string $payload): RowEvaluationResult => unserialize(base64_decode($payload)),
+                $encoded,
+            );
 
             foreach ($results as $result) {
                 if ($result->event !== null) {
