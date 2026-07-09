@@ -61,6 +61,8 @@ Why live/online evals: offline runs gate changes before merge; online scoring ca
 
 Gotcha: online rules match spans by EXACT name (`apply_to_span_names`); the publish command derives `[PagePlanner, PagePlannerAgent]` from the target key, so eval keys must stay derived from the agent class name (BTQL log pulls use ILIKE and are more forgiving).
 
+Gotcha (verified 2026-07, broke production online scoring): Braintrust's online runtime only logs a scorer return that is a bare number or a full Score object — `name` (non-empty string) is REQUIRED alongside `score`; `{score, metadata}` fails at ingest with `Cannot log {...} as a score`. Offline never catches this because `JsScorer`/`scorer-runner.mjs` supply the name from the file slug and ignore any returned one. Scaffolded scorers must return `name` as the snake_cased slug (= `JsScorer::name()`) so offline and online score names align, and the publish smoke test must reject name-less object returns.
+
 ## Conventions
 
 - Every PHP file: `declare(strict_types=1);`. Listeners/middleware are `readonly` classes.

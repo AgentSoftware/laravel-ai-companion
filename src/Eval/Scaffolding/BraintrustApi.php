@@ -139,18 +139,17 @@ class BraintrustApi
 
     /**
      * Run a function server-side (the publish smoke test runs the scorer in the
-     * REAL sandbox — local Node can diverge from it).
+     * REAL sandbox — local Node can diverge from it). Returns the handler's raw
+     * decoded return value: callers must distinguish a bare number (loggable as
+     * a score) from a {score: ...} object (loggable only with a name).
      *
      * @param  array<string, mixed>  $input
-     * @return array<string, mixed>
      */
-    public function invokeFunction(string $id, array $input): array
+    public function invokeFunction(string $id, array $input): mixed
     {
-        $result = $this->request(fn (): Response => $this->client()
+        return $this->request(fn (): Response => $this->client()
             ->post("/v1/function/{$id}/invoke", ['input' => $input]))
             ->json();
-
-        return is_array($result) ? $result : ['score' => $result];
     }
 
     /**

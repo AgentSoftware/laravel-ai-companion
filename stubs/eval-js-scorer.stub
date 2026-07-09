@@ -8,11 +8,17 @@
 // Payload: output = the agent's response (object; text answers arrive as
 // { text: "..." }); input = row/span context (prompt, tool_calls, ...);
 // expected = the dataset row's expected answer (null on live traffic).
+//
+// The returned `name` is REQUIRED once published: Braintrust's online runtime
+// only logs a bare number or a full Score object ({name, score, metadata}) —
+// {score, metadata} without a name fails with "Cannot log ... as a score".
+// Keep it as this snake_case slug so online charts line up with offline runs.
 async function handler({ output, input, expected }) {
   const text = typeof output === "string" ? output : JSON.stringify(output);
 
   // TODO: score the answer between 0 and 1.
   return {
+    name: "{{ score_name }}",
     score: text.length > 0 ? 1 : 0,
     metadata: {},
   };
