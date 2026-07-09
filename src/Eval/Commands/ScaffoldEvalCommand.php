@@ -326,7 +326,14 @@ class ScaffoldEvalCommand extends Command
 
         if (! $exists || confirm("Overwrite existing {$slug}.js?", default: false)) {
             File::ensureDirectoryExists(dirname($path));
-            File::put($path, str_replace('{{ name }}', $slug, (string) file_get_contents(dirname(__DIR__, 3).'/stubs/eval-js-scorer.stub')));
+            // {{ score_name }} must equal JsScorer::name() for this file — the
+            // published scorer's returned name is what online spans are scored
+            // under, and it has to match the offline score name.
+            File::put($path, str_replace(
+                ['{{ name }}', '{{ score_name }}'],
+                [$slug, Str::snake(str_replace('-', '_', $slug))],
+                (string) file_get_contents(dirname(__DIR__, 3).'/stubs/eval-js-scorer.stub'),
+            ));
             info(($exists ? 'Overwrote' : 'Created')." {$relative}");
         }
 

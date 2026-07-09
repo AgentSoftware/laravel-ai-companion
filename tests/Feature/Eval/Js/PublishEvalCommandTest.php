@@ -33,7 +33,7 @@ function fakePublishBraintrust(int $invokeStatus = 200): void
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
         'api.braintrust.dev/v1/function?*' => Http::response(['objects' => []]),
         'api.braintrust.dev/v1/function/fn-1/invoke' => Http::response(
-            $invokeStatus === 200 ? ['score' => 1] : ['error' => 'sandbox boom'],
+            $invokeStatus === 200 ? ['name' => 'my_check', 'score' => 1] : ['error' => 'sandbox boom'],
             $invokeStatus,
         ),
         'api.braintrust.dev/v1/function' => Http::response(['id' => 'fn-1']),
@@ -130,6 +130,37 @@ it('rejects an invalid sample rate before publishing anything', function (): voi
         ->assertFailed();
 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/v1/function'));
+});
+
+it('aborts when the sandbox returns a score object without a name', function (): void {
+    // Braintrust's online runtime rejects {score, metadata} without a name
+    // ("Cannot log {...} as a score") — the smoke test must catch it at publish
+    // time, not on live traffic.
+    Http::fake([
+        'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
+        'api.braintrust.dev/v1/function?*' => Http::response(['objects' => []]),
+        'api.braintrust.dev/v1/function/fn-1/invoke' => Http::response(['score' => 1, 'metadata' => ['ok' => true]]),
+        'api.braintrust.dev/v1/function' => Http::response(['id' => 'fn-1']),
+    ]);
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => '1'])
+        ->assertFailed();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/v1/project_score'));
+});
+
+it('accepts a bare numeric score from the sandbox', function (): void {
+    Http::fake([
+        'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
+        'api.braintrust.dev/v1/function?*' => Http::response(['objects' => []]),
+        'api.braintrust.dev/v1/function/fn-1/invoke' => Http::response('1', 200, ['Content-Type' => 'application/json']),
+        'api.braintrust.dev/v1/function' => Http::response(['id' => 'fn-1']),
+        'api.braintrust.dev/v1/project_score?*' => Http::response(['objects' => []]),
+        'api.braintrust.dev/v1/project_score' => Http::response(['id' => 'rule-1']),
+    ]);
+
+    $this->artisan('ai:publish-eval', ['--target' => 'js-stub', '--scorers' => 'my_check', '--sample' => '1'])
+        ->assertSuccessful();
 });
 
 it('aborts when the sandbox smoke test returns no score', function (): void {

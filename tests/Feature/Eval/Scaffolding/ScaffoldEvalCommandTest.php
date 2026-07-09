@@ -303,8 +303,12 @@ it('scaffolds js scorers and wires them into the target', function (): void {
         ->assertSuccessful();
 
     // Deduped after slugging; numeric-only names are skipped like invalid PHP names.
+    // The returned name must be the snake_case slug (JsScorer::name()) —
+    // Braintrust's online runtime rejects Score objects without a name, and
+    // matching the offline score name keeps charts aligned across both.
     expect(File::exists(base_path('resources/ai/scorers/no-hallucinated-urls.js')))->toBeTrue()
         ->and(File::get(base_path('resources/ai/scorers/no-hallucinated-urls.js')))->toContain('async function handler')
+        ->and(File::get(base_path('resources/ai/scorers/no-hallucinated-urls.js')))->toContain('name: "no_hallucinated_urls"')
         ->and(File::exists(base_path('resources/ai/scorers/123.js')))->toBeFalse();
 
     $target = File::get(app_path('Ai/Eval/Targets/FixtureAgentEvalTarget.php'));

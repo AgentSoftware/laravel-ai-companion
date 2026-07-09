@@ -73,10 +73,12 @@ it('invokes a function and returns the decoded result', function (): void {
     expect($result['score'])->toBe(1);
 });
 
-it('wraps a scalar invoke response', function (): void {
+it('returns a scalar invoke response as-is', function (): void {
+    // A bare number is a valid scorer return — the caller must be able to tell
+    // it apart from a {score: ...} object, which needs a name to be loggable.
     Http::fake(['api.braintrust.dev/v1/function/fn-1/invoke' => Http::response('0.5', 200, ['Content-Type' => 'application/json'])]);
 
-    expect(new BraintrustApi()->invokeFunction('fn-1', []))->toBe(['score' => 0.5]);
+    expect(new BraintrustApi()->invokeFunction('fn-1', []))->toBe(0.5);
 });
 
 it('creates the online rule when none exists by name', function (): void {

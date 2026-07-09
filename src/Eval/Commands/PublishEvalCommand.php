@@ -100,12 +100,19 @@ class PublishEvalCommand extends Command
                 $id = $api->upsertFunction($slug, Str::headline($scorer->name()), $scorer->code());
 
                 // Smoke test in the REAL sandbox — local Node can diverge from it.
-                // A scorer must return a numeric score; anything else (including a
-                // 200-wrapped sandbox error payload) fails the publish.
+                // The online runtime only logs a bare number or a full Score object
+                // ({name, score, ...}); anything else — including {score} without a
+                // name, or a 200-wrapped sandbox error payload — fails at ingest
+                // with "Cannot log ... as a score", so it must fail the publish.
                 $result = $api->invokeFunction($id, ['output' => ['text' => 'smoke test'], 'input' => [], 'expected' => null]);
 
-                if (! is_numeric($result['score'] ?? null)) {
-                    throw new RuntimeException("{$scorer->name()}: sandbox smoke test returned no score — got ".json_encode($result));
+                $loggable = is_numeric($result) || (is_array($result)
+                    && is_numeric($result['score'] ?? null)
+                    && is_string($result['name'] ?? null)
+                    && $result['name'] !== '');
+
+                if (! $loggable) {
+                    throw new RuntimeException("{$scorer->name()}: sandbox smoke test did not return a loggable score (a number, or {name, score}) — got ".json_encode($result));
                 }
 
                 info("{$scorer->name()}: synced and sandbox smoke test passed.");
