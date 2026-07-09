@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\AttachmentStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\CapturingScorer;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\RecordingConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StructuredStubAgent;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StructuredStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StubEvalCommand;
@@ -13,9 +15,11 @@ use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\TextStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ThrowStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ToolStubAgent;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ToolStubTarget;
+use Illuminate\Console\Command;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
@@ -37,6 +41,9 @@ beforeEach(function (): void {
     ]);
 
     $this->app[Kernel::class]->registerCommand(new StubEvalCommand);
+
+    RecordingConcurrencyRunner::reset();
+    $this->app->bind(ConcurrencyRunner::class, RecordingConcurrencyRunner::class);
 });
 
 afterEach(function (): void {
@@ -290,4 +297,37 @@ it('fails on an unknown target', function (): void {
     writeEvalDataset([['brief' => 'x']]);
 
     $this->artisan('stub:eval', ['target' => 'nope'])->assertFailed();
+});
+
+it('batches runs into groups of --concurrency', function (): void {
+    StructuredStubAgent::fake(array_fill(0, 7, ['name' => 'Batched']));
+    writeEvalDataset(array_map(fn (int $i): array => ['brief' => "row {$i}"], range(1, 7)));
+
+    $this->artisan('stub:eval', ['target' => 'stub', '--concurrency' => 3])->assertSuccessful();
+
+    expect(RecordingConcurrencyRunner::$batchSizes)->toBe([3, 3, 1]);
+});
+
+it('caps --concurrency so one batch cannot fire the whole dataset at once', function (): void {
+    StructuredStubAgent::fake(array_fill(0, 30, ['name' => 'Batched']));
+    writeEvalDataset(array_map(fn (int $i): array => ['brief' => "row {$i}"], range(1, 30)));
+
+    $this->artisan('stub:eval', ['target' => 'stub', '--concurrency' => 1000])->assertSuccessful();
+
+    expect(max(RecordingConcurrencyRunner::$batchSizes))->toBeLessThanOrEqual(25);
+});
+
+it('captures failures from every row in a concurrent batch, not just the last', function (): void {
+    writeEvalDataset([
+        ['brief' => 'first row'],
+        ['brief' => 'second row'],
+    ]);
+
+    $status = Artisan::call('stub:eval', ['target' => 'stub-throw']);
+    $output = Artisan::output();
+
+    expect($status)->toBe(Command::FAILURE)
+        ->and($output)->toContain('2 run(s) failed')
+        ->and($output)->toContain('first row — boom')
+        ->and($output)->toContain('second row — boom');
 });

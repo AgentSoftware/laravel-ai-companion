@@ -9,5 +9,5 @@ use AgentSoftware\LaravelAiCompanion\Eval\Commands\RunEvalCommand;
 class StubEvalCommand extends RunEvalCommand
 {
     /** @var string */
-    protected $signature = 'stub:eval {target?} {--dataset=} {--out=} {--provider=} {--model=} {--tag=} {--limit=} {--trials=1}';
+    protected $signature = 'stub:eval {target?} {--dataset=} {--out=} {--provider=} {--model=} {--tag=} {--limit=} {--trials=1} {--concurrency=5} {--timeout=}';
 }
