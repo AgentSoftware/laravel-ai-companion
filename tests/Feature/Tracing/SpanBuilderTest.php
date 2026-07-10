@@ -73,6 +73,16 @@ it('parents agent spans under a deterministic root when source context is set', 
     expect($builder->rootSpan()['id'])->toBe($root['id']);
 });
 
+it('exposes a static root span id computation that matches the context-derived root', function () {
+    Context::add('ai_usage_source_id', 'session-9');
+    Context::add('ai_usage_source_model', 'App\Models\OnboardingSession');
+
+    $builder = app(SpanBuilder::class);
+    $root = $builder->rootSpan();
+
+    expect(SpanBuilder::rootSpanId('App\Models\OnboardingSession', 'session-9'))->toBe($root['id']);
+});
+
 it('returns no root span without source context', function () {
     expect(app(SpanBuilder::class)->rootSpan())->toBeNull();
 });

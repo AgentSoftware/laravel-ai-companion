@@ -11,6 +11,7 @@ Guidance for Claude Code when working in this repository.
 3. **Braintrust tracing** — opt-in exporter shipping every agent interaction to Braintrust as trace trees (see below).
 4. **Evaluations** — offline eval runs over datasets (`ai:eval`, app-extended), interactive scaffolding (`ai:scaffold-eval`), and publishing JS scorers for live/online scoring (`ai:publish-eval`) — see "Evaluations lifecycle" below.
 5. **Tool call logging** — opt-in `RecordAiToolCall` event subscriber → `ai_tool_calls` table, one row per `ToolInvoked` event, hard-linked via `ai_response_log_id` to the `ai_response_logs` row for that invocation. Gated by `tool_call_logs.enabled` config; silently no-ops if no matching response log exists (e.g. `LogAiResponse` middleware not active for that agent).
+6. **User feedback** — `AiFeedback::record($sourceModel, $sourceId, good: true|false, comment: ?string)` posts a thumbs up/down score to Braintrust against the deterministic root span already shipped for that business flow (see `Tracing/SpanBuilder::rootSpanId()`). Synchronous; throws `BraintrustFeedbackException` if Braintrust isn't enabled/configured or the request fails — no silent no-op, since this is a discrete foreground user action, not part of the tracing pipeline.
 
 Stack: PHP 8.4+, spatie/laravel-package-tools, Pest 4 + Orchestra Testbench.
 
