@@ -6,6 +6,4 @@ namespace AgentSoftware\LaravelAiCompanion\Exceptions;
 
 use RuntimeException;
 
-class BraintrustFeedbackException extends RuntimeException
-{
-}
+class BraintrustFeedbackException extends RuntimeException {}

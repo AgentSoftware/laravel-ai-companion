@@ -6,6 +6,7 @@ namespace AgentSoftware\LaravelAiCompanion\Feedback;
 
 use AgentSoftware\LaravelAiCompanion\Braintrust\InteractsWithBraintrustApi;
 use AgentSoftware\LaravelAiCompanion\Exceptions\BraintrustFeedbackException;
+use AgentSoftware\LaravelAiCompanion\Tracing\Exporters\BraintrustExporter;
 use AgentSoftware\LaravelAiCompanion\Tracing\SpanBuilder;
 use Illuminate\Http\Client\RequestException;
 use RuntimeException;
@@ -22,7 +23,7 @@ class BraintrustFeedbackClient
 
     public function record(string $sourceModel, string $sourceId, bool $good, ?string $comment = null): void
     {
-        if (! (bool) config('ai-companion.braintrust.enabled') || blank(config('ai-companion.braintrust.api_key'))) {
+        if (! app(BraintrustExporter::class)->enabled()) {
             throw new BraintrustFeedbackException(
                 'Cannot record Braintrust feedback: tracing is not enabled or no API key is configured.',
             );
