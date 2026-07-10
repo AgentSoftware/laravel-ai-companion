@@ -152,6 +152,11 @@ class SpanBuilder
         return array_values(array_map(fn (ToolCall $call): string => $call->name, $firstStep->toolCalls));
     }
 
+    public static function rootSpanId(string $sourceModel, string $sourceId): string
+    {
+        return Uuid::uuid5(Uuid::NAMESPACE_URL, "ai-companion:{$sourceModel}:{$sourceId}")->toString();
+    }
+
     private function rootId(): ?string
     {
         $sourceId = Context::get('ai_usage_source_id');
@@ -161,7 +166,7 @@ class SpanBuilder
             return null;
         }
 
-        return Uuid::uuid5(Uuid::NAMESPACE_URL, "ai-companion:{$sourceModel}:{$sourceId}")->toString();
+        return self::rootSpanId((string) $sourceModel, (string) $sourceId);
     }
 
     /**
