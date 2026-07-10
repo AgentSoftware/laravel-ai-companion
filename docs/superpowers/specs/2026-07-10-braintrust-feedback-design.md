@@ -36,11 +36,11 @@ This mirrors the existing `Eval/Scaffolding/BraintrustApi` precedent: a Braintru
 ## Components
 
 - **`SpanBuilder::rootSpanId(string $sourceModel, string $sourceId): string`** (new public static method) — extracted from the existing private `rootId()` UUIDv5 computation (`Uuid::uuid5(Uuid::NAMESPACE_URL, "ai-companion:{$sourceModel}:{$sourceId}")`), so the tracing pipeline and the feedback client compute identical ids from the same inputs and can never drift apart. The existing private `rootId()` delegates to this new method using the current `Context` values.
-- **`Braintrust/BraintrustProjectResolver`** (new, extracted) — the project-id lookup + forever-cache logic currently inlined in `BraintrustApi::projectId()`. Shared by `BraintrustApi` and the new `BraintrustFeedbackClient` so there's one cache key and one lookup path for a given project name.
+- **`Braintrust/InteractsWithBraintrustApi`** (new trait, extracted) — the `client()`, `projectId()` (forever-cached), and `request()` (421 EU-data-plane handling) logic currently inlined as private methods on `BraintrustApi`. A trait rather than a constructor-injected service, because `BraintrustApi` is instantiated directly (`new BraintrustApi()`) at several existing call sites with no container DI — a trait shares the logic with zero changes to those call sites. Used by both `BraintrustApi` and the new `BraintrustFeedbackClient`, so there's one cache key and one error-handling path.
 - **`Feedback/BraintrustFeedbackClient`** (new) — `record(string $sourceModel, string $sourceId, bool $good, ?string $comment = null): void`.
   - Throws `BraintrustFeedbackException` if `config('ai-companion.braintrust.enabled')` is false or the API key is missing — checked before any HTTP call.
   - Computes `$spanId = SpanBuilder::rootSpanId($sourceModel, $sourceId)`.
-  - Resolves the project id via `BraintrustProjectResolver`.
+  - Resolves the project id via the shared `InteractsWithBraintrustApi` trait.
   - POSTs `{"feedback": [{"id": $spanId, "scores": {"user_feedback": $good ? 1.0 : 0.0}, "comment": $comment, "source": "app"}]}` to `/v1/project_logs/{project_id}/feedback`.
   - Throws `BraintrustFeedbackException` on non-2xx response, surfacing the response body/status (reusing the existing 421 EU-data-plane hint from `BraintrustApi`'s error handling).
 - **`Facades/AiFeedback`** (new) — thin facade resolving `BraintrustFeedbackClient` from the container. `AiFeedback::record($sourceModel, $sourceId, good: true, comment: null)`.
