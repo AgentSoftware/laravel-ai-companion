@@ -38,7 +38,8 @@
                 "AgentSoftware\\LaravelAiCompanion\\LaravelAiCompanionServiceProvider"
             ],
             "aliases": {
-                "AiUsage": "AgentSoftware\\LaravelAiCompanion\\Facades\\AiUsage"
+                "AiUsage": "AgentSoftware\\LaravelAiCompanion\\Facades\\AiUsage",
+                "AiFeedback": "AgentSoftware\\LaravelAiCompanion\\Facades\\AiFeedback"
             }
         }
     },
