@@ -4,12 +4,8 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Scaffolding;
 
-use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Http\Client\RequestException;
+use AgentSoftware\LaravelAiCompanion\Braintrust\InteractsWithBraintrustApi;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
-use RuntimeException;
 
 /**
  * The single Braintrust-aware client for the eval tooling: scaffolding reads
@@ -19,6 +15,8 @@ use RuntimeException;
  */
 class BraintrustApi
 {
+    use InteractsWithBraintrustApi;
+
     /** @return array<int, array{id: string, name: string}> */
     public function datasets(): array
     {
@@ -191,43 +189,5 @@ class BraintrustApi
 
         $this->request(fn (): Response => $this->client()
             ->patch("/v1/project_score/{$existing['id']}", ['description' => $description, 'config' => $config]));
-    }
-
-    /** @param  callable(): Response  $send */
-    private function request(callable $send): Response
-    {
-        try {
-            return $send()->throw();
-        } catch (RequestException $exception) {
-            if ($exception->response->status() === 421) {
-                throw new RuntimeException(
-                    'Braintrust returned 421 DataPlaneRedirectError — your org is pinned to another data plane. '
-                    .'Set BRAINTRUST_API_URL=https://api-eu.braintrust.dev and retry.',
-                    previous: $exception,
-                );
-            }
-
-            throw $exception;
-        }
-    }
-
-    private function projectId(): string
-    {
-        $project = config('ai-companion.braintrust.project') ?? config('app.name');
-
-        return Cache::rememberForever(
-            "ai-companion:braintrust:project-id:{$project}",
-            fn (): string => (string) $this->request(fn (): Response => $this->client()
-                ->post('/v1/project', ['name' => $project]))
-                ->json('id'),
-        );
-    }
-
-    private function client(): PendingRequest
-    {
-        return Http::baseUrl((string) config('ai-companion.braintrust.api_url'))
-            ->withToken((string) config('ai-companion.braintrust.api_key'))
-            ->connectTimeout(5)
-            ->timeout(30);
     }
 }
