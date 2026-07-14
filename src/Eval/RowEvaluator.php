@@ -7,7 +7,9 @@ namespace AgentSoftware\LaravelAiCompanion\Eval;
 use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\FakesSubAgents;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
+use AgentSoftware\LaravelAiCompanion\Eval\Faking\SubAgentFaker;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Messages\AssistantMessage;
@@ -58,6 +60,10 @@ final readonly class RowEvaluator
             $attachments = $target instanceof HasPromptAttachments
                 ? $target->promptAttachments($row)
                 : [];
+
+            if ($target instanceof FakesSubAgents) {
+                app(SubAgentFaker::class)->install($target->subAgentFakes($environment, $row));
+            }
 
             $startedAt = microtime(true);
             $response = $agent->prompt($input, $attachments, $provider, $model);

@@ -9,6 +9,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScaffoldEvalCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
+use AgentSoftware\LaravelAiCompanion\Eval\Faking\SubAgentFaker;
 use AgentSoftware\LaravelAiCompanion\Eval\LaravelConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAiToolCall;
@@ -62,6 +63,8 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         );
 
         $this->app->bind(ConcurrencyRunner::class, LaravelConcurrencyRunner::class);
+
+        $this->app->singleton(SubAgentFaker::class);
 
         if (config('ai-companion.braintrust.enabled')) {
             Event::subscribe(ExportTrace::class);
