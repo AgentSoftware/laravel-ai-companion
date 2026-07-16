@@ -23,6 +23,21 @@ class BraintrustFeedbackClient
 
     public function record(string $sourceModel, string $sourceId, bool $good, ?string $comment = null): void
     {
+        $this->submit(SpanBuilder::rootSpanId($sourceModel, $sourceId), $good, $comment);
+    }
+
+    /**
+     * Record feedback against a span by its Braintrust id directly — for flows
+     * that have no deterministic source-keyed root span (the span was shipped
+     * with its own invocation id as the span id).
+     */
+    public function recordForSpan(string $spanId, bool $good, ?string $comment = null): void
+    {
+        $this->submit($spanId, $good, $comment);
+    }
+
+    private function submit(string $spanId, bool $good, ?string $comment): void
+    {
         if (! app(BraintrustExporter::class)->enabled()) {
             throw new BraintrustFeedbackException(
                 'Cannot record Braintrust feedback: tracing is not enabled or no API key is configured.',
@@ -30,7 +45,7 @@ class BraintrustFeedbackClient
         }
 
         $feedback = array_filter([
-            'id' => SpanBuilder::rootSpanId($sourceModel, $sourceId),
+            'id' => $spanId,
             'scores' => ['user_feedback' => $good ? 1.0 : 0.0],
             'comment' => $comment,
             'source' => 'app',

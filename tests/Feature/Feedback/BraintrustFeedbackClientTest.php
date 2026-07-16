@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     config()->set('ai-companion.braintrust.enabled', true);
     config()->set('ai-companion.braintrust.api_key', 'test-key');
+    config()->set('ai-companion.braintrust.api_url', 'https://api.braintrust.dev');
     config()->set('ai-companion.braintrust.project', 'My Project');
 });
 
@@ -43,6 +44,31 @@ it('posts feedback for the deterministic root span id of the given source', func
             && $feedback['source'] === 'app';
     });
 });
+
+it('posts feedback for a span id directly', function () {
+    fakeBraintrustFeedbackApi();
+
+    app(BraintrustFeedbackClient::class)->recordForSpan('span-abc', good: true, comment: 'Spot on');
+
+    Http::assertSent(function (Request $request): bool {
+        if (! str_contains($request->url(), '/v1/project_logs/proj-123/feedback')) {
+            return false;
+        }
+
+        $feedback = $request->data()['feedback'][0];
+
+        return $feedback['id'] === 'span-abc'
+            && $feedback['scores'] === ['user_feedback' => 1.0]
+            && $feedback['comment'] === 'Spot on'
+            && $feedback['source'] === 'app';
+    });
+});
+
+it('throws when braintrust is disabled for a span id', function () {
+    config()->set('ai-companion.braintrust.enabled', false);
+
+    app(BraintrustFeedbackClient::class)->recordForSpan('span-abc', good: true);
+})->throws(BraintrustFeedbackException::class);
 
 it('maps a bad rating to a zero score and omits a null comment', function () {
     fakeBraintrustFeedbackApi();
