@@ -79,6 +79,10 @@ class LogAiResponse
      * source-keyed root span when the flow set a Context source, otherwise the
      * invocation span (the only span shipped for a source-less run). Mirrors the
      * grouping SpanBuilder uses when exporting the trace.
+     *
+     * When a source is set this id is flow-level, not per-response: every log
+     * row in the same business flow shares the one root span id, so feedback
+     * recorded per row lands on the same span (last write wins).
      */
     private function feedbackSpanId(AgentResponse $response): string
     {
