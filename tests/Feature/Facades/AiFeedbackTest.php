@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     config()->set('ai-companion.braintrust.enabled', true);
     config()->set('ai-companion.braintrust.api_key', 'test-key');
+    config()->set('ai-companion.braintrust.api_url', 'https://api.braintrust.dev');
     config()->set('ai-companion.braintrust.project', 'My Project');
 });
 

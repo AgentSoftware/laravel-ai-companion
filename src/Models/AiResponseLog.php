@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property string $id
  * @property string|null $invocation_id
+ * @property string|null $feedback_span_id
  * @property string $agent
  * @property string $prompt
  * @property array<string, mixed>|null $response
@@ -29,6 +30,7 @@ class AiResponseLog extends Model
 
     protected $fillable = [
         'invocation_id',
+        'feedback_span_id',
         'agent',
         'prompt',
         'response',

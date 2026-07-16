@@ -7,7 +7,9 @@ use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Middleware\LogAiResponse;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
+use AgentSoftware\LaravelAiCompanion\Tracing\SpanBuilder;
 use Illuminate\Broadcasting\Channel;
+use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Enums\Lab;
@@ -148,6 +150,38 @@ it('logs a successful text response', function () {
         ->and($log->status)->toBe(AiResponseStatus::Success)
         ->and($log->metadata)->toMatchArray(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5-20251001'])
         ->and($log->duration_ms)->toBeGreaterThanOrEqual(0);
+});
+
+it('stores the invocation id as the feedback span when no context source is set', function () {
+    $middleware = new LogAiResponse;
+    $prompt = makeMiddlewarePrompt();
+
+    $middleware->handle($prompt, fn () => new AgentResponse(
+        invocationId: 'inv-no-source',
+        text: 'ok',
+        usage: makeUsage(),
+        meta: new Meta,
+    ));
+
+    expect(AiResponseLog::first()->feedback_span_id)->toBe('inv-no-source');
+});
+
+it('stores the source-keyed root span as the feedback span when a context source is set', function () {
+    Context::add('ai_usage_source_model', 'App\Models\OnboardingSession');
+    Context::add('ai_usage_source_id', 'session-9');
+
+    $middleware = new LogAiResponse;
+    $prompt = makeMiddlewarePrompt();
+
+    $middleware->handle($prompt, fn () => new AgentResponse(
+        invocationId: 'inv-sourced',
+        text: 'ok',
+        usage: makeUsage(),
+        meta: new Meta,
+    ));
+
+    expect(AiResponseLog::first()->feedback_span_id)
+        ->toBe(SpanBuilder::rootSpanId('App\Models\OnboardingSession', 'session-9'));
 });
 
 it('stores structured response payloads as JSON', function () {

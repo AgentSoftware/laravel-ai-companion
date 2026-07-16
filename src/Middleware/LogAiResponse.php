@@ -8,8 +8,10 @@ use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
+use AgentSoftware\LaravelAiCompanion\Tracing\SpanBuilder;
 use Closure;
 use Illuminate\Container\Container;
+use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
@@ -61,6 +63,7 @@ class LogAiResponse
 
             $log->update([
                 'invocation_id' => $response->invocationId,
+                'feedback_span_id' => $this->feedbackSpanId($response),
                 'response' => $response instanceof StructuredAgentResponse
                     ? $response->toArray()
                     : ['text' => $response->text],
@@ -69,5 +72,27 @@ class LogAiResponse
                 'duration_ms' => (int) ((microtime(true) - $startedAt) * 1000),
             ]);
         });
+    }
+
+    /**
+     * The Braintrust span a user's feedback should attach to: the deterministic
+     * source-keyed root span when the flow set a Context source, otherwise the
+     * invocation span (the only span shipped for a source-less run). Mirrors the
+     * grouping SpanBuilder uses when exporting the trace.
+     *
+     * When a source is set this id is flow-level, not per-response: every log
+     * row in the same business flow shares the one root span id, so feedback
+     * recorded per row lands on the same span (last write wins).
+     */
+    private function feedbackSpanId(AgentResponse $response): string
+    {
+        $sourceModel = Context::get('ai_usage_source_model');
+        $sourceId = Context::get('ai_usage_source_id');
+
+        if (filled($sourceModel) && filled($sourceId)) {
+            return SpanBuilder::rootSpanId((string) $sourceModel, (string) $sourceId);
+        }
+
+        return $response->invocationId;
     }
 }

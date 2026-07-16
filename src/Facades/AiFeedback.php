@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static void record(string $sourceModel, string $sourceId, bool $good, ?string $comment = null)
+ * @method static void recordForSpan(string $spanId, bool $good, ?string $comment = null)
  *
  * @see BraintrustFeedbackClient
  */
