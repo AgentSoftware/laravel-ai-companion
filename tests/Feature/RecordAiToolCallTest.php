@@ -46,6 +46,7 @@ it('records a tool call linked to its response log', function () {
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
         result: 'ok',
+        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(1);
@@ -68,6 +69,7 @@ it('skips silently when no matching response log exists', function () {
         tool: Mockery::mock(Tool::class),
         arguments: [],
         result: null,
+        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(0);
@@ -102,6 +104,7 @@ it('never throws when tool call recording fails', function () {
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'y'],
         result: 'ok',
+        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(1);
@@ -125,6 +128,7 @@ it('does not record tool calls when the feature flag is disabled', function () {
         tool: Mockery::mock(Tool::class),
         arguments: [],
         result: 'ok',
+        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(0);

@@ -26,7 +26,6 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
-use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -217,19 +216,11 @@ it('captures the first step tool calls when the agent reports steps', function (
 
     CapturingScorer::$subject = null;
 
-    $firstStep = new Step(
-        text: '',
-        toolCalls: [new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA'])],
-        toolResults: [],
-        finishReason: FinishReason::ToolCalls,
-        usage: new Usage,
-        meta: new Meta('anthropic', 'test'),
-    );
-
-    $withSteps = (new TextResponse('all done', new Usage, new Meta('anthropic', 'test')))
-        ->withSteps(new Collection([$firstStep]));
-
-    ToolStubAgent::fake([$withSteps]);
+    // 0.11's FakeTextGateway drives the loop from a step script (each item is a
+    // step), reading only ->text off a faked TextResponse — a pre-built
+    // ->withSteps() response no longer survives. Script the tool call + reply so
+    // the loop produces a real first step carrying the tool call.
+    ToolStubAgent::fake([new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA']), 'all done']);
     writeEvalDataset([['brief' => 'look up the property']]);
 
     $out = sys_get_temp_dir().'/stub-first-step.ndjson';

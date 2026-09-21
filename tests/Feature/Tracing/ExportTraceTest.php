@@ -14,7 +14,6 @@ use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\PromptingAgent;
 use Laravel\Ai\Events\ToolInvoked;
-use Laravel\Ai\Exceptions\FailoverableException;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\Data\Meta;
@@ -74,14 +73,12 @@ it('attaches failover details to the next span for that agent', function () {
 
     $prompted = makeTracingPromptedEvent('inv-9');
 
-    $exception = Mockery::mock(FailoverableException::class);
-    $exception->allows('getMessage')->andReturn('rate limited');
-
     event(new AgentFailedOver(
+        invocationId: 'inv-failover',
         agent: $prompted->prompt->agent,
         provider: Mockery::mock(Provider::class),
         model: 'gpt-4.1',
-        exception: $exception,
+        exception: new RateLimitedException('rate limited'),
     ));
     event($prompted);
 
@@ -119,6 +116,7 @@ it('never throws even when span building fails', function () {
         tool: Mockery::mock(Tool::class),
         arguments: [],
         result: fopen('php://memory', 'r'), // non-JSON-serializable: must be swallowed, not thrown
+        time: 1.5,
     ));
 
     Queue::assertNothingPushed();
@@ -142,6 +140,7 @@ it('also ships tool spans', function () {
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
         result: 'ok',
+        time: 1.5,
     ));
 
     Queue::assertPushed(ShipSpans::class, function (ShipSpans $job): bool {
@@ -160,6 +159,7 @@ it('records the exception message when the failover exception is throwable', fun
     $prompted = makeTracingPromptedEvent('inv-throwable');
 
     event(new AgentFailedOver(
+        invocationId: 'inv-failover',
         agent: $prompted->prompt->agent,
         provider: Mockery::mock(Provider::class),
         model: 'gpt-4.1',
