@@ -68,7 +68,11 @@ final readonly class RowEvaluator
             $loggable = $agent instanceof HasLoggableProperties ? $agent->loggableProperties() : [];
 
             $toolCalls = $response->toolCalls->map(fn (ToolCall $call): string => $call->name)->values()->all();
-            $transcript = $this->transcript($response);
+
+            // The transcript exists to show what a multi-step run did along the
+            // way; a plain reply with no tool interactions has nothing to trace,
+            // so it is omitted rather than duplicating the reply text.
+            $transcript = $toolCalls === [] ? '' : $this->transcript($response);
 
             // Tool-using agents return a TextResponse with no structured payload —
             // capture the reply text, the tools it chose, and (for multi-step
