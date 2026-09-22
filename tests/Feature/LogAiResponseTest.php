@@ -7,105 +7,30 @@ use AgentSoftware\LaravelAiCompanion\Enums\AiResponseStatus;
 use AgentSoftware\LaravelAiCompanion\Middleware\LogAiResponse;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\StubAgent;
 use AgentSoftware\LaravelAiCompanion\Tracing\SpanBuilder;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Support\Facades\Context;
-use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
-use Laravel\Ai\Responses\QueuedAgentResponse;
-use Laravel\Ai\Responses\StreamableAgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 
 function makeMiddlewareAgent(?array $loggableProperties = null): Agent
 {
     if ($loggableProperties === null) {
-        return new class implements Agent
-        {
-            public function instructions(): string
-            {
-                return 'instructions';
-            }
-
-            public function prompt(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): AgentResponse
-            {
-                throw new RuntimeException('Not implemented');
-            }
-
-            public function stream(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): StreamableAgentResponse
-            {
-                throw new RuntimeException('Not implemented');
-            }
-
-            public function queue(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
-            {
-                throw new RuntimeException('Not implemented');
-            }
-
-            public function broadcast(Decisions|string $prompt, Channel|array $channels, array $attachments = [], bool $now = false, Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
-            {
-                throw new RuntimeException('Not implemented');
-            }
-
-            public function broadcastNow(Decisions|string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
-            {
-                throw new RuntimeException('Not implemented');
-            }
-
-            public function broadcastOnQueue(Decisions|string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
-            {
-                throw new RuntimeException('Not implemented');
-            }
-        };
+        return new StubAgent;
     }
 
-    return new class($loggableProperties) implements Agent, HasLoggableProperties
+    return new class($loggableProperties) extends StubAgent implements HasLoggableProperties
     {
         public function __construct(private readonly array $properties) {}
 
         public function loggableProperties(): array
         {
             return $this->properties;
-        }
-
-        public function instructions(): string
-        {
-            return 'instructions';
-        }
-
-        public function prompt(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): AgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function stream(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): StreamableAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function queue(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function broadcast(Decisions|string $prompt, Channel|array $channels, array $attachments = [], bool $now = false, Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function broadcastNow(Decisions|string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function broadcastOnQueue(Decisions|string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
         }
     };
 }

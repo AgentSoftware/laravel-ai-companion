@@ -3,19 +3,14 @@
 declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Models\AiTokenUsage;
-use Illuminate\Broadcasting\Channel;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\StubAgent;
 use Illuminate\Support\Facades\Context;
-use Laravel\Ai\Approvals\Decisions;
-use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
-use Laravel\Ai\Responses\QueuedAgentResponse;
-use Laravel\Ai\Responses\StreamableAgentResponse;
 
 function makeAgentPromptedEvent(string $promptText = 'Hello', string $responseText = 'World'): AgentPrompted
 {
@@ -33,51 +28,11 @@ function makeAgentPromptedEvent(string $promptText = 'Hello', string $responseTe
         meta: new Meta,
     );
 
-    $agent = new class implements Agent
-    {
-        public function instructions(): string
-        {
-            return 'instructions';
-        }
-
-        public function prompt(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): AgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function stream(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): StreamableAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function queue(Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function broadcast(Decisions|string $prompt, Channel|array $channels, array $attachments = [], bool $now = false, Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function broadcastNow(Decisions|string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): StreamableAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-
-        public function broadcastOnQueue(Decisions|string $prompt, Channel|array $channels, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null): QueuedAgentResponse
-        {
-            throw new RuntimeException('Not implemented');
-        }
-    };
-
-    $provider = Mockery::mock(TextProvider::class);
-
     $agentPrompt = new AgentPrompt(
-        agent: $agent,
+        agent: new StubAgent,
         prompt: $promptText,
         attachments: [],
-        provider: $provider,
+        provider: Mockery::mock(TextProvider::class),
         model: 'claude-haiku-4-5-20251001',
     );
 
