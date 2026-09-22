@@ -9,9 +9,11 @@ use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\PromptingAgent;
+use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\Data\Meta;
@@ -71,7 +73,7 @@ it('attaches failover details to the next span for that agent', function () {
 
     $prompted = makeTracingPromptedEvent('inv-9');
 
-    event(makeAgentFailedOver(
+    event(new AgentFailedOver(
         invocationId: 'inv-failover',
         agent: $prompted->prompt->agent,
         provider: Mockery::mock(Provider::class),
@@ -107,7 +109,7 @@ it('never throws even when span building fails', function () {
     subscribeTracingListeners();
     Queue::fake();
 
-    event(makeToolInvoked(
+    event(new ToolInvoked(
         invocationId: 'inv-x',
         toolInvocationId: 'tool-x',
         agent: makeTracingAgent(),
@@ -131,7 +133,7 @@ it('also ships tool spans', function () {
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
     ));
-    event(makeToolInvoked(
+    event(new ToolInvoked(
         invocationId: 'inv-1',
         toolInvocationId: 'tool-1',
         agent: makeTracingAgent(),
@@ -156,7 +158,7 @@ it('records the exception message when the failover exception is throwable', fun
 
     $prompted = makeTracingPromptedEvent('inv-throwable');
 
-    event(makeAgentFailedOver(
+    event(new AgentFailedOver(
         invocationId: 'inv-failover',
         agent: $prompted->prompt->agent,
         provider: Mockery::mock(Provider::class),

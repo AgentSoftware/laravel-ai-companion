@@ -222,8 +222,7 @@ it('captures the first step tool calls when the agent reports steps', function (
 
     $this->artisan('stub:eval', ['target' => 'stub-tool', '--out' => $out])->assertSuccessful();
 
-    $expected = sdkReportsStepToolCalls() ? ['LookupStubTool'] : [];
-    expect(CapturingScorer::$subject->input['first_step_tool_calls'])->toBe($expected);
+    expect(CapturingScorer::$subject->input['first_step_tool_calls'])->toBe(['LookupStubTool']);
 
     File::delete($out);
 });
