@@ -10,7 +10,6 @@ use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Events\InvokingTool;
-use Laravel\Ai\Events\ToolInvoked;
 
 function subscribeToolCallLogging(): void
 {
@@ -39,7 +38,7 @@ it('records a tool call linked to its response log', function () {
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
     ));
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-1',
         toolInvocationId: 'tool-1',
         agent: $agent,
@@ -62,7 +61,7 @@ it('records a tool call linked to its response log', function () {
 it('skips silently when no matching response log exists', function () {
     subscribeToolCallLogging();
 
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-missing',
         toolInvocationId: 'tool-missing',
         agent: makeTracingAgent(),
@@ -97,7 +96,7 @@ it('never throws when tool call recording fails', function () {
         'input' => [],
     ]);
 
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-x',
         toolInvocationId: 'tool-dupe',
         agent: $agent,
@@ -121,7 +120,7 @@ it('does not record tool calls when the feature flag is disabled', function () {
 
     app(PendingAiResponseLogs::class)->put($agent, $log->id);
 
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-disabled',
         toolInvocationId: 'tool-disabled',
         agent: $agent,
