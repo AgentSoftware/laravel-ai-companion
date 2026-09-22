@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\ToolResultMessage;
+use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\StructuredAgentResponse;
@@ -85,10 +86,10 @@ final readonly class RowEvaluator
                     ...($transcript === '' ? [] : ['transcript' => $transcript]),
                 ];
 
-            $firstStep = $response->steps->first();
-            $firstStepToolCalls = $firstStep === null
-                ? []
-                : array_values(array_map(fn (ToolCall $call): string => $call->name, $firstStep->toolCalls));
+            $firstStepToolCalls = $response->steps->take(1)
+                ->flatMap(fn (Step $step): array => array_map(fn (ToolCall $call): string => $call->name, $step->toolCalls))
+                ->values()
+                ->all();
 
             $subject = new EvalSubject($output, $harness->context($environment), [
                 ...$target->subjectInput($row),
