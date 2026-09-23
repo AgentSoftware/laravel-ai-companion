@@ -19,18 +19,12 @@ use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ToolStubTarget;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Client\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
-use Laravel\Ai\Messages\AssistantMessage;
-use Laravel\Ai\Messages\UserMessage;
-use Laravel\Ai\Responses\Data\FinishReason;
-use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
 
 beforeEach(function (): void {
@@ -217,19 +211,11 @@ it('captures the first step tool calls when the agent reports steps', function (
 
     CapturingScorer::$subject = null;
 
-    $firstStep = new Step(
-        text: '',
-        toolCalls: [new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA'])],
-        toolResults: [],
-        finishReason: FinishReason::ToolCalls,
-        usage: new Usage,
-        meta: new Meta('anthropic', 'test'),
-    );
-
-    $withSteps = (new TextResponse('all done', new Usage, new Meta('anthropic', 'test')))
-        ->withSteps(new Collection([$firstStep]));
-
-    ToolStubAgent::fake([$withSteps]);
+    // 0.11's FakeTextGateway drives the loop from a step script (each item is a
+    // step), reading only ->text off a faked TextResponse — a pre-built
+    // ->withSteps() response no longer survives. Script the tool call + reply so
+    // the loop produces a real first step carrying the tool call.
+    ToolStubAgent::fake([new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA']), 'all done']);
     writeEvalDataset([['brief' => 'look up the property']]);
 
     $out = sys_get_temp_dir().'/stub-first-step.ndjson';
@@ -257,23 +243,29 @@ it('reports no first step tool calls when the agent reports no steps', function 
     File::delete($out);
 });
 
-it('skips non-assistant messages and omits the transcript when empty', function (): void {
-    $withUserMessage = (new TextResponse('done', new Usage, new Meta('anthropic', 'test')))
-        ->withMessages(new Collection([
-            new UserMessage('do a foo'),
-            new AssistantMessage('Looking that up now.'),
-        ]));
+it('skips non-assistant messages and omits the transcript when there are no tool interactions', function (): void {
+    config()->set('ai-companion.eval.targets', [ToolStubTarget::class]);
 
-    TextStubAgent::fake([$withUserMessage, 'plain reply']);
-    writeEvalDataset([['brief' => 'do a foo'], ['brief' => 'no tools']]);
+    // Row 1 runs a tool (so it has a transcript to trace); row 2 is a plain
+    // reply (nothing to trace). The fake script is consumed step-by-step across
+    // the rows: [tool call, final text] for row 1, then [plain reply] for row 2.
+    ToolStubAgent::fake([
+        new ToolCall('c-1', 'LookupStubTool', ['postcode' => 'SW1A 1AA']),
+        'all done',
+        'plain reply',
+    ]);
+    writeEvalDataset([['brief' => 'look up the property'], ['brief' => 'no tools']]);
 
     $out = sys_get_temp_dir().'/stub-messages.ndjson';
 
-    $this->artisan('stub:eval', ['target' => 'stub-text', '--out' => $out])->assertSuccessful();
+    $this->artisan('stub:eval', ['target' => 'stub-tool', '--out' => $out])->assertSuccessful();
 
     [$narrated, $plain] = readNdjson($out);
 
-    expect($narrated['output']['transcript'])->toBe('Looking that up now.')
+    // The tool row traces the interaction, with the user's brief (a
+    // non-assistant message) skipped; the plain reply has no transcript.
+    expect($narrated['output']['transcript'])->toContain('[tool] LookupStubTool')
+        ->and($narrated['output']['transcript'])->not->toContain('look up the property')
         ->and($plain['output'])->not->toHaveKey('transcript');
 
     File::delete($out);

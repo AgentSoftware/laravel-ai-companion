@@ -127,6 +127,7 @@ it('builds a tool span parented to its agent invocation', function () {
         tool: $tool,
         arguments: ['query' => 'homes'],
         result: 'found 3',
+        time: 1.5,
     );
 
     $builder = app(SpanBuilder::class);

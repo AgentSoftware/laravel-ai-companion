@@ -75,9 +75,7 @@ readonly class ExportTrace
     public function handleAgentFailedOver(AgentFailedOver $event): void
     {
         rescue(function () use ($event): void {
-            $error = $event->exception instanceof \Throwable
-                ? $event->exception->getMessage()
-                : '';
+            $error = $event->exception->getMessage();
 
             // AgentFailedOver carries no invocation id, so failovers are parked by
             // agent class and attached to that class's next completed prompt. This
