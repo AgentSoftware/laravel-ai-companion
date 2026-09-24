@@ -10,7 +10,6 @@ use AgentSoftware\LaravelAiCompanion\PendingAiResponseLogs;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Events\InvokingTool;
-use Laravel\Ai\Events\ToolInvoked;
 
 function subscribeToolCallLogging(): void
 {
@@ -39,14 +38,11 @@ it('records a tool call linked to its response log', function () {
         tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
     ));
-    event(new ToolInvoked(
-        invocationId: 'inv-1',
+    event(makeToolInvoked(
         toolInvocationId: 'tool-1',
         agent: $agent,
-        tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'x'],
         result: 'ok',
-        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(1);
@@ -62,14 +58,10 @@ it('records a tool call linked to its response log', function () {
 it('skips silently when no matching response log exists', function () {
     subscribeToolCallLogging();
 
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-missing',
         toolInvocationId: 'tool-missing',
-        agent: makeTracingAgent(),
-        tool: Mockery::mock(Tool::class),
-        arguments: [],
         result: null,
-        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(0);
@@ -97,14 +89,12 @@ it('never throws when tool call recording fails', function () {
         'input' => [],
     ]);
 
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-x',
         toolInvocationId: 'tool-dupe',
         agent: $agent,
-        tool: Mockery::mock(Tool::class),
         arguments: ['q' => 'y'],
         result: 'ok',
-        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(1);
@@ -121,14 +111,10 @@ it('does not record tool calls when the feature flag is disabled', function () {
 
     app(PendingAiResponseLogs::class)->put($agent, $log->id);
 
-    event(new ToolInvoked(
+    event(makeToolInvoked(
         invocationId: 'inv-disabled',
         toolInvocationId: 'tool-disabled',
         agent: $agent,
-        tool: Mockery::mock(Tool::class),
-        arguments: [],
-        result: 'ok',
-        time: 1.5,
     ));
 
     expect(AiToolCall::count())->toBe(0);
