@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Context;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Events\AgentPrompted;
-use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\FinishReason;
@@ -120,14 +119,11 @@ it('builds a tool span parented to its agent invocation', function () {
         }
     };
 
-    $event = new ToolInvoked(
-        invocationId: 'inv-1',
+    $event = makeToolInvoked(
         toolInvocationId: 'tool-7',
-        agent: makeTracingAgent(),
         tool: $tool,
         arguments: ['query' => 'homes'],
         result: 'found 3',
-        time: 1.5,
     );
 
     $builder = app(SpanBuilder::class);
