@@ -30,7 +30,9 @@ final class LlmJudgeScorer implements Scorer
     public function score(EvalSubject $subject): Score
     {
         $reference = trim((string) ($subject->input[$this->input] ?? ''));
-        $candidate = trim((string) ($subject->output[$this->output] ?? ''));
+        // RowEvaluator omits the transcript when a run made no tool calls; its reply text is then the whole transcript.
+        $candidate = trim((string) ($subject->output[$this->output]
+            ?? ($this->output === 'transcript' ? ($subject->output['text'] ?? '') : '')));
 
         if ($reference === '' || $candidate === '') {
             return new Score($this->name, 0.0, ['reason' => 'missing input or output']);
