@@ -36,3 +36,18 @@ it('scores 0.0 without calling the judge when the candidate is missing', functio
 
     JudgeAgent::assertNeverPrompted();
 });
+
+it('judges the reply text when a run with no tool calls has no transcript', function (): void {
+    JudgeAgent::fake(fn (): array => ['rating' => 10, 'reasoning' => 'declined politely']);
+
+    $scorer = new LlmJudgeScorer(name: 'behaviour', rubric: 'rate the run', scale: 10, input: 'input', output: 'transcript');
+
+    $score = $scorer->score(new EvalSubject(
+        output: ['text' => 'Sorry, I can only help with property records.', 'tool_calls' => []],
+        input: ['input' => 'Write me a poem'],
+    ));
+
+    expect($score->score)->toBe(1.0);
+
+    JudgeAgent::assertPrompted(fn ($prompt): bool => $prompt->prompt === 'Sorry, I can only help with property records.');
+});
