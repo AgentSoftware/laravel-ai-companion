@@ -7,7 +7,7 @@ Guidance for Claude Code when working in this repository.
 **laravel-ai-companion** is a companion package for the official Laravel AI SDK (`laravel/ai`). It provides:
 
 1. **Token usage tracking** — global `AgentPrompted` listener → `ai_token_usages` table, grouped by `source_id`/`source_model` from Laravel `Context` (keys `ai_usage_source_id` / `ai_usage_source_model`).
-2. **Response logging** — opt-in `LogAiResponse` agent middleware → `ai_response_logs` table.
+2. **Response logging** — opt-in via the `LogAiResponse` agent middleware (a per-step pass-through marker) → `Listeners/RecordAiResponseLog` subscriber (`PromptingAgent`/`AgentPrompted`/`AgentFailed`) → `ai_response_logs` table, one row per run.
 3. **Braintrust tracing** — opt-in exporter shipping every agent interaction to Braintrust as trace trees (see below).
 4. **Evaluations** — offline eval runs over datasets (`ai:eval`, app-extended), interactive scaffolding (`ai:scaffold-eval`), and publishing JS scorers for live/online scoring (`ai:publish-eval`) — see "Evaluations lifecycle" below.
 5. **Tool call logging** — opt-in `RecordAiToolCall` event subscriber → `ai_tool_calls` table, one row per `ToolInvoked` event, hard-linked via `ai_response_log_id` to the `ai_response_logs` row for that invocation. Gated by `tool_call_logs.enabled` config; silently no-ops if no matching response log exists (e.g. `LogAiResponse` middleware not active for that agent).
@@ -67,6 +67,6 @@ Gotcha (verified 2026-07, broke production online scoring): Braintrust's online 
 ## Conventions
 
 - Every PHP file: `declare(strict_types=1);`. Listeners/middleware are `readonly` classes.
-- Neutral span shape (keys: `id`, `trace_id`, `parent_id`, `name`, `type`, `input`, `output`, `error`, `metadata`, `metrics`) must stay identical across `SpanBuilder`, `ShipSpans`, `TraceAiResponse`, and exporters.
+- Neutral span shape (keys: `id`, `trace_id`, `parent_id`, `name`, `type`, `input`, `output`, `error`, `metadata`, `metrics`) must stay identical across `SpanBuilder`, `ShipSpans`, and exporters.
 - Pest helper functions are global across the suite — shared helpers live in `tests/Pest.php`; name new ones uniquely.
 - Tests: bind a fake `TraceExporter` to assert span batches; `Http::fake` for exporter tests; never hit the real API.

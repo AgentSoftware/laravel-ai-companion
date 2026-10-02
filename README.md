@@ -54,6 +54,8 @@ Context::add('ai_usage_source_model', $session::class);
 
 The `source()` morph relation on `AiTokenUsage` lets you load the originating model directly.
 
+`input_tokens` is the provider's full input count and *includes* the cache-read and cache-write tokens (stored separately as subsets); `output_tokens` includes reasoning tokens. Price each input category separately rather than applying one rate to `input_tokens`. Rows written by companion 4.x (`laravel/ai` 0.x) excluded cached tokens — see [UPGRADE.md](UPGRADE.md).
+
 ## Response logging
 
 Opt agents in by implementing `Laravel\Ai\Contracts\HasMiddleware` and adding `LogAiResponse`:
@@ -71,7 +73,7 @@ class SegmentBuilderAgent implements Agent, HasMiddleware
 }
 ```
 
-Each prompt writes a row to `ai_response_logs` with the prompt text, structured/text response, provider metadata, status (`running`/`success`/`failure`), and `duration_ms`.
+Each run writes one row to `ai_response_logs` with the invocation id, prompt text, structured/text response, provider metadata, status (`running`/`success`/`failure`), and `duration_ms` — however many generation steps or provider failovers the run takes. Streamed runs are not logged.
 
 To attach domain context (e.g. user/company) without relying on `Auth::user()` — which doesn't work in queued or CLI contexts — implement `HasLoggableProperties`:
 
@@ -139,22 +141,9 @@ Spans ship via a queued job (`ShipSpans`). The exporter never throws into AI cal
 
 ### Hard-failure capture
 
-By default, the `ExportTrace` event subscriber captures successful invocations. To also capture hard failures (exceptions that propagate out of the agent), attach the `TraceAiResponse` middleware to the agent:
+The `ExportTrace` subscriber captures failed runs automatically from the SDK's `AgentFailed` event: a run that throws after exhausting its providers ships one error span carrying the exception and any failovers along the way. A run that fails over and then recovers ships only its success span, with the failed attempts recorded in `metadata.failovers`.
 
-```php
-use AgentSoftware\LaravelAiCompanion\Middleware\TraceAiResponse;
-use Laravel\Ai\Contracts\HasMiddleware;
-
-class SegmentBuilderAgent implements Agent, HasMiddleware
-{
-    public function middleware(): array
-    {
-        return [TraceAiResponse::class];
-    }
-}
-```
-
-With provider failover configured, a recovered failover ships one error span per failed attempt plus the eventual success span — that is intended behaviour.
+The `TraceAiResponse` middleware is no longer needed and is a deprecated no-op.
 
 ### Swapping the backend
 
@@ -421,7 +410,7 @@ AI_COMPANION_EVAL_EXPORTER=my-backend
 ## How it works
 
 - Token tracking listens to the `AgentPrompted` event dispatched by `laravel/ai`. One row per prompt, always.
-- Response logging hooks into the agent middleware pipeline. The middleware writes a `running` row before calling the agent, updates it to `success`/`failure` after, and records `duration_ms`.
+- Response logging listens to the `PromptingAgent`, `AgentPrompted`, and `AgentFailed` events for agents carrying the `LogAiResponse` middleware. It writes a `running` row when the run starts, updates it to `success`/`failure` when the run ends, and records `duration_ms`. (Agent middleware wraps each generation step, so the middleware itself is only the opt-in marker.)
 
 The two tables stay independent — token tracking works without response logging, and vice versa.
 
@@ -429,4 +418,4 @@ The two tables stay independent — token tracking works without response loggin
 
 - PHP 8.4+
 - Laravel 12 or 13
-- `laravel/ai`
+- `laravel/ai` 1.x (use companion 4.x for `laravel/ai` 0.9–0.11 — see [UPGRADE.md](UPGRADE.md))

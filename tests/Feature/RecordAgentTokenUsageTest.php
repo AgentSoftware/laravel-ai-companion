@@ -10,13 +10,13 @@ use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 
 function makeAgentPromptedEvent(string $promptText = 'Hello', string $responseText = 'World'): AgentPrompted
 {
-    $usage = new Usage(
-        promptTokens: 100,
-        completionTokens: 50,
+    $usage = new TextUsage(
+        inputTokens: 100,
+        outputTokens: 50,
         cacheWriteInputTokens: 10,
         cacheReadInputTokens: 5,
     );

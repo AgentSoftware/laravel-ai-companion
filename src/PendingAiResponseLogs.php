@@ -5,37 +5,36 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion;
 
 /**
- * Correlates an in-flight AiResponseLog row to its Agent instance.
+ * Correlates an in-flight AiResponseLog row to its invocation id.
  *
- * AiResponseLog::invocation_id is only known once the whole agent run
- * completes, but tool-call events fire mid-run and need to resolve the
- * log row immediately. Keying by the Agent instance (unique per request)
- * lets LogAiResponse register the row as soon as it's created, without
- * relying on the event bus or leaking listeners across concurrent runs.
+ * Tool-call and completion events fire per run and need to resolve the log
+ * row without a database lookup per event — and without one at all for the
+ * agents that never opted in, since only runs RecordAiResponseLog started a
+ * row for are registered here.
  */
 class PendingAiResponseLogs
 {
     private const int MAX_ENTRIES = 500;
 
-    /** @var array<int, string> spl_object_id(Agent) => AiResponseLog id */
+    /** @var array<string, string> invocation id => AiResponseLog id */
     private array $logIds = [];
 
-    public function put(object $agent, string $logId): void
+    public function put(string $invocationId, string $logId): void
     {
         if (count($this->logIds) >= self::MAX_ENTRIES) {
             array_shift($this->logIds);
         }
 
-        $this->logIds[spl_object_id($agent)] = $logId;
+        $this->logIds[$invocationId] = $logId;
     }
 
-    public function get(object $agent): ?string
+    public function get(string $invocationId): ?string
     {
-        return $this->logIds[spl_object_id($agent)] ?? null;
+        return $this->logIds[$invocationId] ?? null;
     }
 
-    public function forget(object $agent): void
+    public function forget(string $invocationId): void
     {
-        unset($this->logIds[spl_object_id($agent)]);
+        unset($this->logIds[$invocationId]);
     }
 }

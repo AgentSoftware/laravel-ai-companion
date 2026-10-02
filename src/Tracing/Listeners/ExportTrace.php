@@ -7,6 +7,7 @@ namespace AgentSoftware\LaravelAiCompanion\Tracing\Listeners;
 use AgentSoftware\LaravelAiCompanion\Tracing\Jobs\ShipSpans;
 use AgentSoftware\LaravelAiCompanion\Tracing\SpanBuilder;
 use AgentSoftware\LaravelAiCompanion\Tracing\TraceTimings;
+use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\InvokingTool;
@@ -29,6 +30,7 @@ readonly class ExportTrace
         return [
             PromptingAgent::class => 'handlePromptingAgent',
             AgentPrompted::class => 'handleAgentPrompted',
+            AgentFailed::class => 'handleAgentFailed',
             InvokingTool::class => 'handleInvokingTool',
             ToolInvoked::class => 'handleToolInvoked',
             AgentFailedOver::class => 'handleAgentFailedOver',
@@ -53,6 +55,18 @@ readonly class ExportTrace
             }
 
             $this->ship($this->builder->agentSpan($event, $startedAt, microtime(true), $failovers));
+        });
+    }
+
+    public function handleAgentFailed(AgentFailed $event): void
+    {
+        rescue(function () use ($event): void {
+            $this->ship($this->builder->failedAgentSpan(
+                $event,
+                $this->timings->pull("agent:{$event->invocationId}"),
+                microtime(true),
+                $this->timings->pullFailovers($event->prompt->agent::class),
+            ));
         });
     }
 

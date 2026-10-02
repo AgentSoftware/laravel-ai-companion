@@ -17,10 +17,10 @@ readonly class RecordAgentTokenUsage
         AiTokenUsage::create([
             'agent' => get_class($event->prompt->agent),
             'model' => $event->prompt->model,
-            'input_tokens' => $usage->promptTokens,
-            'output_tokens' => $usage->completionTokens,
-            'cache_write_tokens' => $usage->cacheWriteInputTokens,
-            'cache_read_tokens' => $usage->cacheReadInputTokens,
+            'input_tokens' => $usage->inputTokens,
+            'output_tokens' => $usage->outputTokens,
+            'cache_write_tokens' => $usage->cacheWriteInputTokens ?? 0,
+            'cache_read_tokens' => $usage->cacheReadInputTokens ?? 0,
             'source_id' => Context::get('ai_usage_source_id'),
             'source_model' => Context::get('ai_usage_source_model'),
         ]);

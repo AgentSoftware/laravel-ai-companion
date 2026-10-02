@@ -11,6 +11,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Exporters\ExperimentExporterManager;
 use AgentSoftware\LaravelAiCompanion\Eval\LaravelConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAgentTokenUsage;
+use AgentSoftware\LaravelAiCompanion\Listeners\RecordAiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Listeners\RecordAiToolCall;
 use AgentSoftware\LaravelAiCompanion\Models\AiResponseLog;
 use AgentSoftware\LaravelAiCompanion\Tracing\Contracts\TraceExporter;
@@ -62,6 +63,10 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         );
 
         $this->app->bind(ConcurrencyRunner::class, LaravelConcurrencyRunner::class);
+
+        // Always subscribed: agents opt in individually via the LogAiResponse
+        // middleware, which this subscriber checks for when a run starts.
+        Event::subscribe(RecordAiResponseLog::class);
 
         if (config('ai-companion.braintrust.enabled')) {
             Event::subscribe(ExportTrace::class);

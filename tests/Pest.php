@@ -12,11 +12,15 @@ use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Exceptions\FailoverableException;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Gateway\StepResponse;
+use Laravel\Ai\Gateway\StepResult;
+use Laravel\Ai\PendingStep;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 
 uses(TestCase::class)->in('Feature');
 
@@ -30,9 +34,9 @@ function makeTracingPromptedEvent(string $invocationId = 'inv-1'): AgentPrompted
     $response = new AgentResponse(
         invocationId: $invocationId,
         text: 'World',
-        usage: new Usage(
-            promptTokens: 100,
-            completionTokens: 50,
+        usage: new TextUsage(
+            inputTokens: 100,
+            outputTokens: 50,
             cacheWriteInputTokens: 10,
             cacheReadInputTokens: 5,
         ),
@@ -60,22 +64,15 @@ function makeToolInvoked(
     mixed $result = 'ok',
     float $time = 1.5,
 ): ToolInvoked {
-    $args = [
-        'invocationId' => $invocationId,
-        'toolInvocationId' => $toolInvocationId,
-        'agent' => $agent ?? makeTracingAgent(),
-        'tool' => $tool ?? Mockery::mock(Tool::class),
-        'arguments' => $arguments,
-        'result' => $result,
-        'time' => $time,
-    ];
-
-    // laravel/ai 0.11 added $time.
-    if (! property_exists(ToolInvoked::class, 'time')) {
-        unset($args['time']);
-    }
-
-    return new ToolInvoked(...$args);
+    return new ToolInvoked(
+        invocationId: $invocationId,
+        toolInvocationId: $toolInvocationId,
+        agent: $agent ?? makeTracingAgent(),
+        tool: $tool ?? Mockery::mock(Tool::class),
+        arguments: $arguments,
+        result: $result,
+        time: $time,
+    );
 }
 
 function makeAgentFailedOver(
@@ -85,18 +82,38 @@ function makeAgentFailedOver(
     ?FailoverableException $exception = null,
     string $invocationId = 'inv-failover',
 ): AgentFailedOver {
-    $args = [
-        'invocationId' => $invocationId,
-        'agent' => $agent ?? makeTracingAgent(),
-        'provider' => $provider ?? Mockery::mock(Provider::class),
-        'model' => $model,
-        'exception' => $exception ?? new RateLimitedException('rate limited'),
-    ];
+    return new AgentFailedOver(
+        invocationId: $invocationId,
+        agent: $agent ?? makeTracingAgent(),
+        provider: $provider ?? Mockery::mock(Provider::class),
+        model: $model,
+        exception: $exception ?? new RateLimitedException('rate limited'),
+    );
+}
 
-    // laravel/ai 0.11 added $invocationId.
-    if (! property_exists(AgentFailedOver::class, 'invocationId')) {
-        unset($args['invocationId']);
-    }
+function makePendingStep(): PendingStep
+{
+    return new PendingStep(
+        number: 0,
+        isFinalStep: false,
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
+        instructions: null,
+        messages: [],
+        tools: [],
+        schema: null,
+        options: null,
+        invocationId: 'inv-step',
+    );
+}
 
-    return new AgentFailedOver(...$args);
+function makeStepResult(): StepResult
+{
+    return new StepResult(new StepResponse(
+        text: 'ok',
+        toolCalls: [],
+        finishReason: FinishReason::Stop,
+        usage: new TextUsage,
+        meta: new Meta,
+    ));
 }

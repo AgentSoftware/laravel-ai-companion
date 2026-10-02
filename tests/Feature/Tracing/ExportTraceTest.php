@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\PromptingAgent;
@@ -158,5 +159,52 @@ it('records the exception message when the failover exception is throwable', fun
         $span = collect($job->spans)->firstWhere('id', 'inv-throwable');
 
         return $span['metadata']['failovers'][0]['error'] === 'rate limited hard';
+    });
+});
+
+it('ships an error span when a run fails after exhausting its providers', function () {
+    subscribeTracingListeners();
+    Queue::fake();
+    Context::add('ai_usage_source_id', 'session-1');
+    Context::add('ai_usage_source_model', 'App\Models\OnboardingSession');
+
+    $prompt = makeTracingPromptedEvent('inv-fail')->prompt;
+
+    event(new PromptingAgent(invocationId: 'inv-fail', prompt: $prompt));
+    event(makeAgentFailedOver(agent: $prompt->agent, model: 'gpt-4.1'));
+    event(new AgentFailed('inv-fail', $prompt, new RuntimeException('provider exploded')));
+
+    Queue::assertPushed(ShipSpans::class, function (ShipSpans $job) use ($prompt): bool {
+        [$root, $span] = $job->spans;
+
+        return $span['id'] === 'inv-fail'
+            && $span['parent_id'] === $root['id']
+            && $span['type'] === 'llm'
+            && $span['error'] === 'provider exploded'
+            && $span['input'] === ['prompt' => 'Hello']
+            && $span['metadata']['agent'] === $prompt->agent::class
+            && $span['metadata']['exception'] === RuntimeException::class
+            && $span['metadata']['failovers'][0]['model'] === 'gpt-4.1'
+            && $span['metrics']['end'] >= $span['metrics']['start'];
+    });
+});
+
+it('ships a failed run as its own trace root when no source context is set', function () {
+    subscribeTracingListeners();
+    Queue::fake();
+
+    $prompt = makeTracingPromptedEvent('inv-orphan')->prompt;
+
+    // No PromptingAgent: the start timing is missing, so the span collapses to its end time.
+    event(new AgentFailed('inv-orphan', $prompt, new RuntimeException('boom')));
+
+    Queue::assertPushed(ShipSpans::class, function (ShipSpans $job): bool {
+        [$span] = $job->spans;
+
+        return count($job->spans) === 1
+            && $span['trace_id'] === 'inv-orphan'
+            && $span['parent_id'] === null
+            && ! array_key_exists('failovers', $span['metadata'])
+            && $span['metrics']['start'] === $span['metrics']['end'];
     });
 });
