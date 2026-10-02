@@ -29,7 +29,7 @@ it('records a tool call linked to its response log', function () {
         'status' => AiResponseStatus::Running,
     ]);
 
-    app(PendingAiResponseLogs::class)->put($agent, $log->id);
+    app(PendingAiResponseLogs::class)->put('inv-1', $log->id);
 
     event(new InvokingTool(
         invocationId: 'inv-1',
@@ -78,7 +78,7 @@ it('never throws when tool call recording fails', function () {
         'status' => AiResponseStatus::Running,
     ]);
 
-    app(PendingAiResponseLogs::class)->put($agent, $log->id);
+    app(PendingAiResponseLogs::class)->put('inv-x', $log->id);
 
     // Pre-existing row with the same tool_invocation_id trips the unique
     // constraint, forcing the listener's create() to throw internally.
@@ -109,7 +109,7 @@ it('does not record tool calls when the feature flag is disabled', function () {
         'status' => AiResponseStatus::Running,
     ]);
 
-    app(PendingAiResponseLogs::class)->put($agent, $log->id);
+    app(PendingAiResponseLogs::class)->put('inv-disabled', $log->id);
 
     event(makeToolInvoked(
         invocationId: 'inv-disabled',

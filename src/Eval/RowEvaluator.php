@@ -122,9 +122,9 @@ final readonly class RowEvaluator
                     ),
                     metrics: new EvalRunMetrics(
                         latencyMs: $latencyMs,
-                        promptTokens: $usage->promptTokens,
-                        completionTokens: $usage->completionTokens,
-                        tokens: $usage->promptTokens + $usage->completionTokens,
+                        promptTokens: $usage->inputTokens,
+                        completionTokens: $usage->outputTokens,
+                        tokens: $usage->inputTokens + $usage->outputTokens,
                     ),
                     expected: is_array($row['expected'] ?? null) ? $row['expected'] : null,
                 ),

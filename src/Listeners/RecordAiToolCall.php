@@ -38,7 +38,7 @@ readonly class RecordAiToolCall
         rescue(function () use ($event): void {
             $startedAt = $this->timings->pull("tool_call:{$event->toolInvocationId}");
 
-            $logId = $this->pending->get($event->agent);
+            $logId = $this->pending->get($event->invocationId);
 
             if ($logId === null) {
                 return;

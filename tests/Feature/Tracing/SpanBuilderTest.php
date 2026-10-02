@@ -15,9 +15,9 @@ use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -50,7 +50,8 @@ it('builds an agent span without source context as its own trace root', function
             'tokens' => 150,
             'cache_write_tokens' => 10,
             'cache_read_tokens' => 5,
-            'reasoning_tokens' => 0,
+            // Unreported by the provider: left null, which the exporter strips.
+            'reasoning_tokens' => null,
         ]);
 });
 
@@ -143,9 +144,9 @@ it('falls back to the prompt model when response meta has no provider or model',
     $response = new AgentResponse(
         invocationId: 'inv-2',
         text: 'World',
-        usage: new Usage(
-            promptTokens: 100,
-            completionTokens: 50,
+        usage: new TextUsage(
+            inputTokens: 100,
+            outputTokens: 50,
             cacheWriteInputTokens: 10,
             cacheReadInputTokens: 5,
         ),
@@ -196,7 +197,7 @@ it('merges the agent loggable properties into span metadata', function () {
     $event = new AgentPrompted(invocationId: 'inv-9', prompt: $prompt, response: new AgentResponse(
         invocationId: 'inv-9',
         text: 'World',
-        usage: new Usage(promptTokens: 1, completionTokens: 1, cacheWriteInputTokens: 0, cacheReadInputTokens: 0),
+        usage: new TextUsage(inputTokens: 1, outputTokens: 1, cacheWriteInputTokens: 0, cacheReadInputTokens: 0),
         meta: new Meta(provider: 'anthropic', model: 'claude-haiku-4-5-20251001'),
     ));
 
@@ -217,14 +218,16 @@ it('attaches tool call names and first step tool call names to agent span metada
         toolCalls: [new ToolCall('c-1', 'WriteTextTool', ['field_path' => 'content.title.text'])],
         toolResults: [],
         finishReason: FinishReason::ToolCalls,
-        usage: new Usage(promptTokens: 1, completionTokens: 1, cacheWriteInputTokens: 0, cacheReadInputTokens: 0),
+        usage: new TextUsage(inputTokens: 1, outputTokens: 1, cacheWriteInputTokens: 0, cacheReadInputTokens: 0),
         meta: new Meta(provider: 'anthropic', model: 'claude-haiku-4-5-20251001'),
+        reasoning: '',
+        replayBlocks: [],
     );
 
     $response = (new AgentResponse(
         invocationId: 'inv-4',
         text: 'done',
-        usage: new Usage(promptTokens: 100, completionTokens: 50, cacheWriteInputTokens: 10, cacheReadInputTokens: 5),
+        usage: new TextUsage(inputTokens: 100, outputTokens: 50, cacheWriteInputTokens: 10, cacheReadInputTokens: 5),
         meta: new Meta(provider: 'anthropic', model: 'claude-haiku-4-5-20251001'),
     ))
         ->withToolCallsAndResults(
@@ -265,7 +268,7 @@ it('reports no first step tool calls when the response has no steps', function (
     $response = (new AgentResponse(
         invocationId: 'inv-5',
         text: 'I will now fill in the sections.',
-        usage: new Usage(promptTokens: 100, completionTokens: 50, cacheWriteInputTokens: 10, cacheReadInputTokens: 5),
+        usage: new TextUsage(inputTokens: 100, outputTokens: 50, cacheWriteInputTokens: 10, cacheReadInputTokens: 5),
         meta: new Meta(provider: 'anthropic', model: 'claude-haiku-4-5-20251001'),
     ));
 
@@ -294,9 +297,9 @@ it('uses the structured array as span output for a StructuredAgentResponse', fun
         invocationId: 'inv-3',
         structured: $structured,
         text: '{"name":"Elliot","score":42}',
-        usage: new Usage(
-            promptTokens: 100,
-            completionTokens: 50,
+        usage: new TextUsage(
+            inputTokens: 100,
+            outputTokens: 50,
             cacheWriteInputTokens: 10,
             cacheReadInputTokens: 5,
         ),

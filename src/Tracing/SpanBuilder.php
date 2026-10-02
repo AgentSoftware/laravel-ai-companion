@@ -7,6 +7,7 @@ namespace AgentSoftware\LaravelAiCompanion\Tracing;
 use AgentSoftware\LaravelAiCompanion\Contracts\HasLoggableProperties;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Context;
+use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Responses\Data\Step;
@@ -60,12 +61,45 @@ class SpanBuilder
             'metrics' => [
                 'start' => $startedAt,
                 'end' => $endedAt,
-                'prompt_tokens' => $usage->promptTokens,
-                'completion_tokens' => $usage->completionTokens,
-                'tokens' => $usage->promptTokens + $usage->completionTokens,
+                'prompt_tokens' => $usage->inputTokens,
+                'completion_tokens' => $usage->outputTokens,
+                'tokens' => $usage->inputTokens + $usage->outputTokens,
                 'cache_write_tokens' => $usage->cacheWriteInputTokens,
                 'cache_read_tokens' => $usage->cacheReadInputTokens,
                 'reasoning_tokens' => $usage->reasoningTokens,
+            ],
+        ];
+    }
+
+    /**
+     * Build the error span for an agent run that failed after exhausting its providers.
+     *
+     * @param  array<int, array<string, mixed>>  $failovers
+     * @return array<string, mixed>
+     */
+    public function failedAgentSpan(AgentFailed $event, ?float $startedAt, float $endedAt, array $failovers = []): array
+    {
+        $rootId = $this->rootId();
+        $agent = $event->prompt->agent;
+
+        return [
+            'id' => $event->invocationId,
+            'trace_id' => $rootId ?? $event->invocationId,
+            'parent_id' => $rootId,
+            'name' => class_basename($agent),
+            'type' => 'llm',
+            'input' => ['prompt' => $event->prompt->prompt],
+            'output' => null,
+            'error' => $event->exception->getMessage(),
+            'metadata' => array_filter([
+                'agent' => $agent::class,
+                'model' => $event->prompt->model,
+                'exception' => $event->exception::class,
+                'failovers' => $failovers !== [] ? $failovers : null,
+            ]),
+            'metrics' => [
+                'start' => $startedAt ?? $endedAt,
+                'end' => $endedAt,
             ],
         ];
     }
