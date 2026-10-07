@@ -8,6 +8,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\FiltersDatasetRows;
 use AgentSoftware\LaravelAiCompanion\Eval\Evaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
 use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
@@ -71,7 +72,7 @@ abstract class RunEvalCommand extends Command
             return self::FAILURE;
         }
 
-        $rows = $this->filterDataset($this->loadDataset($target));
+        $rows = $this->filterDataset($this->excludeRejectedRows($target, $this->loadDataset($target)));
 
         if ($rows->isEmpty()) {
             error('Dataset is empty, missing, or filtered to nothing.');
@@ -352,6 +353,29 @@ abstract class RunEvalCommand extends Command
         }
 
         return collect(File::json($path));
+    }
+
+    /**
+     * Drop the rows an opt-in target rejects, before --tag/--limit so --limit
+     * counts only rows that will actually run.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function excludeRejectedRows(EvalTarget $target, Collection $rows): Collection
+    {
+        if (! $target instanceof FiltersDatasetRows) {
+            return $rows;
+        }
+
+        $included = $rows->filter(fn (array $row): bool => $target->includeRow($row))->values();
+        $skipped = $rows->count() - $included->count();
+
+        if ($skipped > 0) {
+            info(sprintf('Skipped %d %s (excluded by target).', $skipped, Str::plural('row', $skipped)));
+        }
+
+        return $included;
     }
 
     /**

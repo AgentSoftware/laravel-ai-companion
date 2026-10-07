@@ -10,7 +10,7 @@ final readonly class ExperimentEventData
      * @param  array<string, mixed>  $input
      * @param  array<string, mixed>  $output
      * @param  array<int, Score>  $scores
-     * @param  array<string, mixed>|null  $expected
+     * @param  array<string, mixed>|string|null  $expected
      */
     public function __construct(
         public array $input,
@@ -18,7 +18,7 @@ final readonly class ExperimentEventData
         public array $scores,
         public EvalRunMetadata $metadata,
         public EvalRunMetrics $metrics,
-        public ?array $expected = null,
+        public array|string|null $expected = null,
     ) {}
 
     /**

@@ -239,6 +239,26 @@ final class SummaryTarget implements EvalTarget
 }
 ```
 
+#### Skipping dataset rows
+
+A target that must ignore some rows (drafts with no `expected` answer yet, say) can implement `FiltersDatasetRows`. Targets that run every row simply omit it.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\FiltersDatasetRows;
+
+final class SummaryTarget implements EvalTarget, FiltersDatasetRows
+{
+    // …
+
+    public function includeRow(array $row): bool
+    {
+        return filled($row['expected'] ?? null);
+    }
+}
+```
+
+The runner applies `includeRow()` right after loading the dataset, so exclusion happens **before** `--tag` and `--limit` (`--limit=5` means five included rows, not five rows of which some were dropped). It prints `Skipped N rows (excluded by target).` when any rows were excluded.
+
 ### Scorers
 
 A scorer returns a `Score` in the range **0.0–1.0 where 1.0 = good** (the convention Braintrust and the result table assume — encapsulate any inverted polarity inside the scorer). Use the built-ins, or write your own.
@@ -289,6 +309,8 @@ A dataset is a JSON array of rows. `promptInput()` / `subjectInput()` decide whi
   { "input": "Summarise the Q3 report", "expected": "revenue", "tags": ["finance"] }
 ]
 ```
+
+A row's `expected` can be an array or a plain string; both are exported to Braintrust experiments.
 
 ### Running
 
