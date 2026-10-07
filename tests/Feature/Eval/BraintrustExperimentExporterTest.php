@@ -192,3 +192,34 @@ it('throws on http failure', function () {
 
     app(BraintrustExperimentExporter::class)->export('composer/v3/gemini/t0', [experimentEvent()]);
 })->throws(RequestException::class);
+
+it('sends the expected value to the experiment row as given', function (array|string|null $expected) {
+    fakeBraintrustExperimentApi();
+
+    $event = new ExperimentEventData(
+        input: ['brief' => 'Make it pop'],
+        output: ['blocks' => []],
+        scores: [new Score('catalogue_valid', 1.0)],
+        metadata: new EvalRunMetadata(promptName: null, promptVersion: null, model: null, provider: null, tags: []),
+        metrics: new EvalRunMetrics(latencyMs: 1, promptTokens: 1, completionTokens: 1, tokens: 2),
+        expected: $expected,
+    );
+
+    app(BraintrustExperimentExporter::class)->export('composer/v3/gemini/t0', [$event]);
+
+    Http::assertSent(function (Request $request) use ($expected): bool {
+        if (! str_contains($request->url(), '/insert')) {
+            return false;
+        }
+
+        $sent = $request->data()['events'][0];
+
+        return $expected === null
+            ? ! array_key_exists('expected', $sent)
+            : ($sent['expected'] ?? null) === $expected;
+    });
+})->with([
+    'string' => ['Use the Reports tab.'],
+    'array' => [['slug' => 'reports']],
+    'null' => [null],
+]);
