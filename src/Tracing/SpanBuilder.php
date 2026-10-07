@@ -134,8 +134,8 @@ class SpanBuilder
     /**
      * Build the trace root span for the current business source, if any.
      *
-     * Deterministic id means every listener can upsert it; the backend
-     * merges events that share an id.
+     * Deterministic id means every listener can upsert it; the exporter
+     * sends events as merges so a re-ship never replaces the existing row.
      *
      * @return array<string, mixed>|null
      */

@@ -177,3 +177,15 @@ it('throws on http failure so the queued job retries', function () {
 
     app(BraintrustExporter::class)->ship([neutralSpan()]);
 })->throws(RequestException::class);
+
+it('merges every event into any existing row instead of replacing it', function () {
+    fakeBraintrustApi();
+    $root = [...neutralSpan(), 'id' => 'root-1', 'parent_id' => null, 'name' => 'Conversation', 'type' => 'task', 'input' => null, 'output' => null];
+
+    // The root span is re-shipped with every agent and tool span. A plain insert replaces the
+    // row in Braintrust, wiping any scores or feedback already logged against the trace.
+    app(BraintrustExporter::class)->ship([$root, neutralSpan()]);
+
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/insert')
+        && array_column($request->data()['events'], '_is_merge') === [true, true]);
+});

@@ -39,6 +39,10 @@ class BraintrustExporter implements TraceExporter
         $metrics = array_filter($span['metrics'], fn (mixed $value): bool => $value !== null);
 
         return array_filter([
+            // A plain insert replaces any existing row with the same id. The root span is
+            // re-shipped with every agent and tool span, so without merging each re-ship would
+            // wipe the scores and feedback already logged against the trace.
+            '_is_merge' => true,
             'id' => $span['id'],
             'span_id' => $span['id'],
             'root_span_id' => $span['trace_id'],
