@@ -1,5 +1,23 @@
 # Upgrade Guide
 
+## Upgrading To 5.1 From 5.0
+
+There are no new migrations, and no action is needed unless you read `ExperimentEventData::$expected` directly.
+
+### Added
+
+- `Eval\Contracts\FiltersDatasetRows`: an opt-in contract for an `EvalTarget` to exclude dataset rows. It runs before `--tag` and `--limit`, and the runner reports `Skipped N rows (excluded by target).`
+
+### Fixed
+
+- A string `expected` on a dataset row was dropped from exported experiment rows. It is now exported alongside array values.
+
+### `ExperimentEventData::$expected` Type Widened
+
+**Likelihood Of Impact: Low**
+
+The property is now `array|string|null` (was `array|null`). Code that reads it and assumes an array must handle a string.
+
 ## Upgrading To 5.0 From 4.x
 
 Companion 5.0 requires `laravel/ai` 1.x. Stay on companion 4.x if you are still on `laravel/ai` 0.9–0.11. Upgrade `laravel/ai` first by following [its upgrade guide](https://github.com/laravel/ai/blob/1.x/UPGRADE.md).
