@@ -54,6 +54,18 @@ it('prints how many rows the target skipped', function (): void {
         ->assertSuccessful();
 });
 
+it('uses the singular when the target skips one row', function (): void {
+    File::put(base_path('filters-dataset-rows.json'), json_encode([
+        ['brief' => 'draft', 'expected' => ''],
+        ['brief' => 'kept', 'expected' => 'x'],
+    ]));
+    TextStubAgent::fake(['a']);
+
+    $this->artisan('stub:eval', ['target' => 'stub-filter', '--out' => $this->out, '--dataset' => 'filters-dataset-rows.json'])
+        ->expectsOutputToContain('Skipped 1 row (excluded by target).')
+        ->assertSuccessful();
+});
+
 it('is unaffected for targets without the contract', function (): void {
     TextStubAgent::fake(['a', 'b', 'c', 'd', 'e']);
 

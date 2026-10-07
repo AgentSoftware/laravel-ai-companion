@@ -372,7 +372,7 @@ abstract class RunEvalCommand extends Command
         $skipped = $rows->count() - $included->count();
 
         if ($skipped > 0) {
-            info(sprintf('Skipped %d rows (excluded by target).', $skipped));
+            info(sprintf('Skipped %d %s (excluded by target).', $skipped, Str::plural('row', $skipped)));
         }
 
         return $included;
