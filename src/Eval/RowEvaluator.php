@@ -126,7 +126,7 @@ final readonly class RowEvaluator
                         completionTokens: $usage->outputTokens,
                         tokens: $usage->inputTokens + $usage->outputTokens,
                     ),
-                    expected: is_array($row['expected'] ?? null) ? $row['expected'] : null,
+                    expected: $this->expected($row['expected'] ?? null),
                 ),
                 failure: null,
             );
@@ -138,6 +138,21 @@ final readonly class RowEvaluator
         } finally {
             DB::rollBack();
         }
+    }
+
+    /**
+     * Arrays and non-empty strings are exported as the row's expectation;
+     * anything else (null, empty string, scalars) is omitted.
+     *
+     * @return array<string, mixed>|string|null
+     */
+    private function expected(mixed $expected): array|string|null
+    {
+        if (is_array($expected) || (is_string($expected) && $expected !== '')) {
+            return $expected;
+        }
+
+        return null;
     }
 
     /**
