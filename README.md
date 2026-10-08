@@ -261,7 +261,7 @@ The runner applies `includeRow()` right after loading the dataset, so exclusion 
 
 ### Classifier targets
 
-To evaluate a classification (`Laravel\Ai\Classification`) instead of an agent, implement `ClassifierEvalTarget`. It has the same `key()`, `label()`, `defaultDataset()` and `scorers()`, plus `classification()`, which turns a row into the state, the keyed questions, any attachments, and the answers the row expects. The runner classifies each row with `--provider` / `--model`, so one dataset can be compared across TypeSafe, OpenAI and OpenRouter. No harness environment is booted for a classification row (a harness must still be configured; its `experimentMetadata()` is recorded). One target can serve many decisions by switching on a row field:
+To evaluate a classification (`Laravel\Ai\Classification`) instead of an agent, implement `ClassifierEvalTarget`. It has the same `key()`, `label()`, `defaultDataset()` and `scorers()`, plus `classification()`, which turns a row into the state, the keyed questions, any attachments, and the answers the row expects. The runner classifies each row with `--provider` / `--model`, so one dataset can be compared across TypeSafe, OpenAI and OpenRouter. Classifier targets need no harness; when one is configured, its `experimentMetadata()` is still recorded. One target can serve many decisions by switching on a row field:
 
 ```php
 use AgentSoftware\LaravelAiCompanion\Eval\ClassificationCase;
@@ -283,7 +283,7 @@ final class DecisionTarget implements ClassifierEvalTarget
             new ChoiceAnswerScorer('priority'),
             new BooleanAnswerScorer('gas', threshold: 0.5),
             new BooleanAnswerScorer('gas', tag: ExpectedAnswerTag::MustCatch), // gas_must_catch: recall; a miss fails the run
-            new BooleanAnswerScorer('gas', tag: ExpectedAnswerTag::MustPass),  // gas_must_pass: 1 - false-hold rate
+            new BooleanAnswerScorer('gas', tag: ExpectedAnswerTag::MustPass),  // gas_must_pass: 1 - false-positive rate
         ];
     }
 
@@ -305,7 +305,7 @@ A row's `expected` is keyed by question: a bare answer, or `{"answer": …, "tag
 
 #### Datasets in Braintrust
 
-Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `Base64Image` (or `Base64Document`), so the target passes the field straight to `attachments`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`.
+Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `LocalImage` (or `LocalDocument`), so the target passes the field straight to `attachments`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`, into a private temporary directory that is deleted when the run ends.
 
 ```json
 [
@@ -314,7 +314,7 @@ Rows that must stay out of git (photos, say) can live in a Braintrust dataset in
 ]
 ```
 
-The run prints each score's mean and a confusion matrix per question, and exports input (state and questions), output (each answer with its probabilities), expected and scores to Braintrust as `{key}/{provider}/{model}`. Any `blocking` score below 1.0 (a missed must-catch row) fails the command after the results are exported.
+The run prints each score's mean and a confusion matrix per question, and exports input (state and questions), output (each answer with its probabilities), expected and scores to Braintrust as `{key}/{provider}/{model}`. Any `blocking` score below 1.0 (a missed must-catch row) fails the command after the results are exported, and so does any classification row that fails to run, since its gates were never measured.
 
 ### Scorers
 
@@ -386,7 +386,7 @@ php artisan app:eval summary            # interactive picker if target omitted
 php artisan app:eval summary --limit=5  # smoke test the first 5 rows
 php artisan app:eval summary --trials=3 # run each row 3x to measure variance
 php artisan app:eval decisions --provider=openai  # a classifier target on another provider
-php artisan app:eval decisions --dataset=braintrust:maintenance-hazard-photos --provider=openai
+php artisan app:eval decisions --dataset=braintrust:photo-reports --provider=openai
 ```
 
 You get a coloured score table per run. With a Braintrust key set it pushes an experiment named `summary/v{prompt}/{model}` and attaches git metadata so Braintrust auto-selects the previous run on your branch as the baseline. Without a key, scored NDJSON is written to `eval.output_path`.

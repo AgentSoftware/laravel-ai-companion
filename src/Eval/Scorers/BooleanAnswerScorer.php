@@ -18,7 +18,7 @@ use Laravel\Ai\Responses\Data\BooleanAnswer;
  * Narrow it to one tag to measure a gate. With `MustCatch` the score is named
  * `{question}_must_catch`, averages to recall over the tagged rows, and a miss
  * fails the run; with `MustPass` it is `{question}_must_pass`, averaging to one
- * minus the false-hold rate. Rows without the tag are skipped.
+ * minus the false-positive rate. Rows without the tag are skipped.
  */
 final readonly class BooleanAnswerScorer implements Scorer
 {
@@ -41,6 +41,10 @@ final readonly class BooleanAnswerScorer implements Scorer
 
         if (! $answer instanceof BooleanAnswer) {
             throw new InvalidArgumentException("No boolean answer to score for question [{$this->question}].");
+        }
+
+        if (! is_bool($expected->answer)) {
+            throw new InvalidArgumentException("The expected answer for boolean question [{$this->question}] must be true or false.");
         }
 
         $actual = $answer->isTrue($this->threshold);

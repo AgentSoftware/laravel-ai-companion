@@ -177,7 +177,7 @@ it('passes a row\'s attachments to the classification', function (): void {
     Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => count($prompt->attachments) === 1);
 });
 
-it('reports a row whose classification fails without stopping the others', function (): void {
+it('fails the run when a classification fails, without stopping the other rows', function (): void {
     Classification::fake([['gas' => new BooleanAnswer(0.9)]]);
     writeClassifierDataset([
         ['decision' => 'hazard', 'state' => 'Gas smell', 'expected' => ['gas' => true]],
@@ -187,8 +187,34 @@ it('reports a row whose classification fails without stopping the others', funct
     $status = Artisan::call('stub:eval', ['target' => 'stub-classifier', '--dataset' => classifierDatasetPath(), '--out' => $this->out]);
     $output = Artisan::output();
 
-    expect($status)->toBe(Command::SUCCESS)
+    expect($status)->toBe(Command::FAILURE)
         ->and($output)->toContain('1 run(s) failed')
         ->and($output)->toContain('{"report":"Photo of the meter"} — Provider [typesafe] does not support classification attachments.')
+        ->and($output)->toContain('1 classification(s) failed to run, so their gates were not measured.')
         ->and(readClassifierNdjson($this->out))->toHaveCount(1);
+});
+
+it('reports a row the target cannot turn into a classification as a failed run', function (): void {
+    Classification::fake([['gas' => new BooleanAnswer(0.9)]]);
+    writeClassifierDataset([
+        ['decision' => 'hazard', 'state' => 'Gas smell', 'expected' => ['gas' => true]],
+        ['decision' => 'hazard', 'state' => 'Gas smell again', 'expected' => ['gas' => ['tag' => 'must_catch']]],
+    ]);
+
+    $status = Artisan::call('stub:eval', ['target' => 'stub-classifier', '--dataset' => classifierDatasetPath(), '--out' => $this->out]);
+
+    expect($status)->toBe(Command::FAILURE)
+        ->and(Artisan::output())->toContain('An expected answer must be true, false or a choice')
+        ->and(readClassifierNdjson($this->out))->toHaveCount(1);
+});
+
+it('runs a classifier target without a harness', function (): void {
+    config()->set('ai-companion.eval.harness', null);
+    Classification::fake([['gas' => new BooleanAnswer(0.9)]]);
+    writeClassifierDataset([['decision' => 'hazard', 'state' => 'Gas smell', 'expected' => ['gas' => true]]]);
+
+    $this->artisan('stub:eval', ['target' => 'stub-classifier', '--dataset' => classifierDatasetPath(), '--out' => $this->out])
+        ->assertSuccessful();
+
+    expect((float) readClassifierNdjson($this->out)[0]['scores']['gas'])->toBe(1.0);
 });

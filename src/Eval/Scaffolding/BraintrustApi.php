@@ -6,7 +6,6 @@ namespace AgentSoftware\LaravelAiCompanion\Eval\Scaffolding;
 
 use AgentSoftware\LaravelAiCompanion\Braintrust\InteractsWithBraintrustApi;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -65,20 +64,26 @@ class BraintrustApi
         $events = [];
         $cursor = null;
 
+        // Pages run newest first over the whole version history, so a later page
+        // can repeat a row at an older version: the first copy of an id wins.
         do {
             $page = $this->request(fn (): Response => $this->client()
                 ->post("/v1/dataset/{$datasetId}/fetch", array_filter(['limit' => self::DATASET_PAGE_SIZE, 'cursor' => $cursor])));
             $batch = (array) $page->json('events', []);
-            $events = [...$events, ...$batch];
-            $cursor = $page->json('cursor');
-        } while (count($batch) === self::DATASET_PAGE_SIZE && is_string($cursor));
 
-        return array_map(function (array $event): array {
+            foreach ($batch as $event) {
+                $events[$event['id']] ??= $event;
+            }
+
+            $cursor = $page->json('cursor');
+        } while ($batch !== [] && is_string($cursor));
+
+        return array_values(array_map(function (array $event): array {
             $input = $event['input'] ?? null;
 
             return (is_array($input) ? $input : ['input' => $input])
-                + array_filter(['expected' => $event['expected'] ?? null, 'tags' => $event['tags'] ?? null]);
-        }, $events);
+                + array_filter(['expected' => $event['expected'] ?? null, 'tags' => $event['tags'] ?? null], fn (mixed $value): bool => $value !== null);
+        }, $events));
     }
 
     /**
@@ -123,18 +128,6 @@ class BraintrustApi
         return (array) $this->request(fn (): Response => $this->client()
             ->post('/btql', ['query' => $query, 'fmt' => 'json']))
             ->json('data', []);
-    }
-
-    private function orgId(): string
-    {
-        $project = config('ai-companion.braintrust.project') ?? config('app.name');
-
-        return Cache::rememberForever(
-            "ai-companion:braintrust:org-id:{$project}",
-            fn (): string => (string) $this->request(fn (): Response => $this->client()
-                ->post('/v1/project', ['name' => $project]))
-                ->json('org_id'),
-        );
     }
 
     /**

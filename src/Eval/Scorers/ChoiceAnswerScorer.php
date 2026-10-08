@@ -32,12 +32,16 @@ final readonly class ChoiceAnswerScorer implements Scorer
             throw new InvalidArgumentException("No choice answer to score for question [{$this->question}].");
         }
 
+        if (! is_string($expected->answer)) {
+            throw new InvalidArgumentException("The expected answer for choice question [{$this->question}] must be one of its options.");
+        }
+
         return new Score($this->question, $answer->choice === $expected->answer ? 1.0 : 0.0, [
             'expected' => $expected->answer,
             'actual' => $answer->choice,
             'probabilities' => $answer->probabilities,
             'confidence' => $answer->confidence,
-            'confusion' => ['expected' => (string) $expected->answer, 'actual' => $answer->choice],
+            'confusion' => ['expected' => $expected->answer, 'actual' => $answer->choice],
         ]);
     }
 }

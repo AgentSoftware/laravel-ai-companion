@@ -300,7 +300,7 @@ it('prompts for the target when none is given', function (): void {
     writeEvalDataset([['brief' => 'pick me']]);
 
     $this->artisan('stub:eval')
-        ->expectsChoice('Which agent do you want to eval?', 'stub', [
+        ->expectsChoice('Which target do you want to eval?', 'stub', [
             'stub' => 'Structured stub',
             'stub-text' => 'Text stub',
             'stub-throw' => 'Throwing stub',

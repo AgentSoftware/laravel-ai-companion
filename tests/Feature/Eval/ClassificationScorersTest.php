@@ -32,6 +32,14 @@ it('rejects an unknown expected answer tag rather than dropping the gate', funct
     ExpectedAnswer::fromDataset(['gas' => ['answer' => true, 'tag' => 'must_cath']]);
 })->throws(ValueError::class);
 
+it('rejects an expected answer that is not true, false or a choice', function (mixed $value): void {
+    ExpectedAnswer::fromDataset(['gas' => $value]);
+})->with([
+    'a number' => [1],
+    'null' => [null],
+    'an object without an answer' => [['tag' => 'must_catch']],
+])->throws(InvalidArgumentException::class, 'An expected answer must be true, false or a choice');
+
 it('scores a boolean answer against the expected answer at the threshold', function (): void {
     $scorer = new BooleanAnswerScorer('gas', threshold: 0.7);
 
@@ -73,7 +81,7 @@ it('measures must-catch rows as a blocking score and skips untagged rows', funct
         ->and($untagged->name)->toBe('gas_must_catch');
 });
 
-it('measures must-pass rows as a non-blocking false-hold score', function (): void {
+it('measures must-pass rows as a non-blocking false-positive score', function (): void {
     $held = new BooleanAnswerScorer('gas', tag: ExpectedAnswerTag::MustPass)
         ->score(classifiedSubject(['gas' => new BooleanAnswer(0.6)], ['gas' => ['answer' => false, 'tag' => 'must_pass']]));
 
@@ -111,3 +119,11 @@ it('skips a choice question the row expects nothing for', function (): void {
 it('refuses to score a choice question that has no choice answer', function (): void {
     new ChoiceAnswerScorer('priority')->score(classifiedSubject([], ['priority' => 'urgent']));
 })->throws(InvalidArgumentException::class, 'No choice answer to score for question [priority].');
+
+it('refuses a boolean question whose expected answer is not true or false', function (): void {
+    new BooleanAnswerScorer('gas')->score(classifiedSubject(['gas' => new BooleanAnswer(0.9)], ['gas' => 'yes']));
+})->throws(InvalidArgumentException::class, 'The expected answer for boolean question [gas] must be true or false.');
+
+it('refuses a choice question whose expected answer is not an option', function (): void {
+    new ChoiceAnswerScorer('priority')->score(classifiedSubject(['priority' => new ChoiceAnswer('urgent', [])], ['priority' => true]));
+})->throws(InvalidArgumentException::class, 'The expected answer for choice question [priority] must be one of its options.');

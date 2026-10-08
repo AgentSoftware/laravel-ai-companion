@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval;
 
+use InvalidArgumentException;
+
 final readonly class ExpectedAnswer
 {
     public function __construct(
@@ -14,19 +16,25 @@ final readonly class ExpectedAnswer
     /**
      * Read a dataset row's expected answers, keyed by question. Each value is a
      * bare answer (`true`, `"urgent"`) or `{"answer": true, "tag": "must_catch"}`.
-     * An unknown tag throws rather than silently dropping a must-catch gate.
+     * A malformed answer or an unknown tag throws rather than silently dropping
+     * a must-catch gate.
      *
      * @param  array<string, mixed>  $expected
      * @return array<string, self>
      */
     public static function fromDataset(array $expected): array
     {
-        return array_map(
-            fn (mixed $value): self => is_array($value)
-                ? new self($value['answer'], isset($value['tag']) ? ExpectedAnswerTag::from($value['tag']) : null)
-                : new self($value),
-            $expected,
-        );
+        return array_map(function (mixed $value): self {
+            $answer = is_array($value) ? ($value['answer'] ?? null) : $value;
+
+            if (! is_bool($answer) && ! is_string($answer)) {
+                throw new InvalidArgumentException('An expected answer must be true, false or a choice, or {"answer": …, "tag": …}; got '.json_encode($value).'.');
+            }
+
+            $tag = is_array($value) && isset($value['tag']) ? ExpectedAnswerTag::from($value['tag']) : null;
+
+            return new self($answer, $tag);
+        }, $expected);
     }
 
     /**

@@ -8,6 +8,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\BraintrustAttachments;
 use AgentSoftware\LaravelAiCompanion\Eval\ClassificationRowEvaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ClassifierEvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\DatasetTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
@@ -71,17 +72,26 @@ abstract class RunEvalCommand extends Command
 
     public function handle(ExperimentExporter $exporter, ConcurrencyRunner $concurrency, BraintrustApi $braintrust): int
     {
-        $harness = $this->harness();
-
-        if ($harness === null) {
-            error('No eval harness configured. Set ai-companion.eval.harness to an EvalHarness implementation.');
-
-            return self::FAILURE;
-        }
-
         $target = $this->resolveTarget();
 
         if ($target === null) {
+            return self::FAILURE;
+        }
+
+        $harness = $this->harness();
+        $evaluator = new Evaluator($target->scorers());
+        $provider = $this->option('provider');
+        $model = $this->option('model');
+
+        $rowEvaluator = match (true) {
+            $target instanceof ClassifierEvalTarget => new ClassificationRowEvaluator($target, $evaluator, $provider, $model),
+            $harness !== null => new RowEvaluator($target, $evaluator, $harness, $provider, $model),
+            default => null,
+        };
+
+        if ($rowEvaluator === null) {
+            error('No eval harness configured. Set ai-companion.eval.harness to an EvalHarness implementation.');
+
             return self::FAILURE;
         }
 
@@ -93,48 +103,53 @@ abstract class RunEvalCommand extends Command
             return self::FAILURE;
         }
 
-        // Only the rows that will run are resolved, so --tag/--limit skip downloads.
-        $attachments = new BraintrustAttachments($braintrust);
-        $rows = $rows->map(fn (array $row): array => $attachments->resolve($row));
+        $attachmentDirectory = sys_get_temp_dir().'/ai-companion-eval-'.Str::random(16);
 
-        $evaluator = new Evaluator($target->scorers());
-        $trials = max(1, (int) $this->option('trials'));
+        try {
+            // Only the rows that will run are resolved, so --tag/--limit skip downloads.
+            $attachments = new BraintrustAttachments($braintrust, $attachmentDirectory);
+            $rows = $rows->map(fn (array $row): array => $attachments->resolve($row));
 
-        // Run each row `trials` times; same input each time so Braintrust buckets
-        // the trials together and reports variance.
-        $runs = $rows->flatMap(fn (array $row): array => array_fill(0, $trials, $row))->values();
+            $trials = max(1, (int) $this->option('trials'));
 
-        intro(sprintf('%s · %d run(s)%s', $target->label(), $runs->count(), $this->option('model') ? ' · '.$this->option('model') : ''));
+            // Run each row `trials` times; same input each time so Braintrust buckets
+            // the trials together and reports variance.
+            $runs = $rows->flatMap(fn (array $row): array => array_fill(0, $trials, $row))->values();
 
-        $events = $this->runConcurrently($runs, $target, $evaluator, $harness, $concurrency);
+            intro(sprintf('%s · %d run(s)%s', $target->label(), $runs->count(), $this->option('model') ? ' · '.$this->option('model') : ''));
 
-        if ($this->failures !== []) {
-            warning(count($this->failures).' run(s) failed:'.PHP_EOL.implode(PHP_EOL, $this->failures));
+            $events = $this->runConcurrently($runs, $rowEvaluator, $concurrency);
+
+            if ($this->failures !== []) {
+                warning(count($this->failures).' run(s) failed:'.PHP_EOL.implode(PHP_EOL, $this->failures));
+            }
+
+            $first = $events->first();
+
+            if ($first === null) {
+                error('Every run failed — nothing to report.');
+
+                return self::FAILURE;
+            }
+
+            $this->renderResults($events);
+            $this->renderSummary($events);
+
+            if ($exporter->enabled()) {
+                $experiment = $this->experimentName($target, $first);
+                $id = $exporter->export($experiment, $events->all(), $harness?->experimentMetadata() ?? [], $this->repoInfo());
+
+                outro(sprintf('Pushed %d row(s) to Braintrust experiment "%s" (%s).', $events->count(), $experiment, $id));
+            } else {
+                $this->writeNdjson($target, $events->map(fn (ExperimentEventData $event): array => $event->toArray())->all());
+
+                outro(sprintf('No Braintrust API key — wrote %d row(s) to %s', $events->count(), $this->outPath($target)));
+            }
+
+            return $this->failOnUnmetGates($target, $events);
+        } finally {
+            File::deleteDirectory($attachmentDirectory);
         }
-
-        $first = $events->first();
-
-        if ($first === null) {
-            error('Every run failed — nothing to report.');
-
-            return self::FAILURE;
-        }
-
-        $this->renderResults($events);
-        $this->renderSummary($events);
-
-        if ($exporter->enabled()) {
-            $experiment = $this->experimentName($target, $first);
-            $id = $exporter->export($experiment, $events->all(), $harness->experimentMetadata(), $this->repoInfo());
-
-            outro(sprintf('Pushed %d row(s) to Braintrust experiment "%s" (%s).', $events->count(), $experiment, $id));
-        } else {
-            $this->writeNdjson($target, $events->map(fn (ExperimentEventData $event): array => $event->toArray())->all());
-
-            outro(sprintf('No Braintrust API key — wrote %d row(s) to %s', $events->count(), $this->outPath($target)));
-        }
-
-        return $this->failOnBlockingMisses($events);
     }
 
     private function harness(): ?EvalHarness
@@ -157,17 +172,17 @@ abstract class RunEvalCommand extends Command
         /** @var Collection<string, EvalTarget|ClassifierEvalTarget> $targets */
         $targets = collect($classes)
             ->map(fn (string $class): EvalTarget|ClassifierEvalTarget => app($class))
-            ->keyBy(fn (EvalTarget|ClassifierEvalTarget $target): string => $target->key());
+            ->keyBy(fn (DatasetTarget $target): string => $target->key());
 
         if ($targets->isEmpty()) {
-            error('No eval targets configured. Add EvalTarget classes to ai-companion.eval.targets.');
+            error('No eval targets configured. Add EvalTarget or ClassifierEvalTarget classes to ai-companion.eval.targets.');
 
             return null;
         }
 
         $key = $this->argument('target') ?? select(
-            label: 'Which agent do you want to eval?',
-            options: $targets->map(fn (EvalTarget|ClassifierEvalTarget $target): string => $target->label())->all(),
+            label: 'Which target do you want to eval?',
+            options: $targets->map(fn (DatasetTarget $target): string => $target->label())->all(),
         );
 
         $target = $targets->get($key);
@@ -190,15 +205,9 @@ abstract class RunEvalCommand extends Command
      */
     private function runConcurrently(
         Collection $runs,
-        EvalTarget|ClassifierEvalTarget $target,
-        Evaluator $evaluator,
-        EvalHarness $harness,
+        RowEvaluator|ClassificationRowEvaluator $rowEvaluator,
         ConcurrencyRunner $concurrency,
     ): Collection {
-        $rowEvaluator = new RowEvaluator;
-        $classificationEvaluator = new ClassificationRowEvaluator;
-        $provider = $this->option('provider');
-        $model = $this->option('model');
         $batchSize = min(self::MAX_CONCURRENCY, max(1, (int) $this->option('concurrency')));
         $timeout = $this->option('timeout') !== null ? max(1, (int) $this->option('timeout')) : self::DEFAULT_TIMEOUT;
 
@@ -220,13 +229,9 @@ abstract class RunEvalCommand extends Command
             // checkmarks, em dashes), so this isn't an edge case — base64 keeps the
             // wire bytes ASCII-only regardless of how the pipe chunks them.
             $tasks = $batch
-                ->map(function (array $row) use ($rowEvaluator, $classificationEvaluator, $target, $evaluator, $harness, $provider, $model): Closure {
-                    return function () use ($rowEvaluator, $classificationEvaluator, $row, $target, $evaluator, $harness, $provider, $model): string {
-                        $result = $target instanceof ClassifierEvalTarget
-                            ? $classificationEvaluator->evaluate($row, $target, $evaluator, $provider, $model)
-                            : $rowEvaluator->evaluate($row, $target, $evaluator, $harness, $provider, $model);
-
-                        return base64_encode(serialize($result));
+                ->map(function (array $row) use ($rowEvaluator): Closure {
+                    return function () use ($rowEvaluator, $row): string {
+                        return base64_encode(serialize($rowEvaluator->evaluate($row)));
                     };
                 })
                 ->values()
@@ -329,25 +334,31 @@ abstract class RunEvalCommand extends Command
     }
 
     /**
-     * Fail the run when any blocking score (e.g. a must-catch row) missed, after
-     * the results have been reported and exported.
+     * Fail the run, after the results have been reported and exported, when a
+     * blocking score (e.g. a must-catch row) missed. A classifier row that failed
+     * to run was never scored, so it could have been a missed gate too: any
+     * failed classification fails the run.
      *
      * @param  Collection<int, ExperimentEventData>  $events
      */
-    private function failOnBlockingMisses(Collection $events): int
+    private function failOnUnmetGates(DatasetTarget $target, Collection $events): int
     {
         $misses = $events->flatMap(fn (ExperimentEventData $event): array => collect($event->scores)
             ->filter(fn (Score $score): bool => $score->blocking && ! $score->skipped && $score->score < 1.0)
             ->map(fn (Score $score): string => sprintf('%s — %s', $score->name, Str::limit($this->inputLabel($event), 60)))
             ->all());
 
-        if ($misses->isEmpty()) {
-            return self::SUCCESS;
+        $unmeasured = $target instanceof ClassifierEvalTarget ? count($this->failures) : 0;
+
+        if ($misses->isNotEmpty()) {
+            error(count($misses).' blocking score(s) missed:'.PHP_EOL.$misses->implode(PHP_EOL));
         }
 
-        error(count($misses).' blocking score(s) missed:'.PHP_EOL.$misses->implode(PHP_EOL));
+        if ($unmeasured > 0) {
+            error("{$unmeasured} classification(s) failed to run, so their gates were not measured.");
+        }
 
-        return self::FAILURE;
+        return $misses->isEmpty() && $unmeasured === 0 ? self::SUCCESS : self::FAILURE;
     }
 
     private function inputLabel(ExperimentEventData $event): string
@@ -385,14 +396,17 @@ abstract class RunEvalCommand extends Command
      * no prompt version and is compared across providers, so it is named by
      * provider and model instead.
      */
-    private function experimentName(EvalTarget|ClassifierEvalTarget $target, ExperimentEventData $event): string
+    private function experimentName(DatasetTarget $target, ExperimentEventData $event): string
     {
-        $version = $event->metadata->promptVersion ?? 'dev';
-        $model = $event->metadata->model ?? $this->option('model') ?? $this->option('provider') ?? 'default';
-
-        $name = $target instanceof ClassifierEvalTarget
-            ? "{$target->key()}/{$event->metadata->provider}/{$model}"
-            : "{$target->key()}/v{$version}/{$model}";
+        if ($target instanceof ClassifierEvalTarget) {
+            $provider = $event->metadata->provider ?? $this->option('provider') ?? 'default';
+            $model = $event->metadata->model ?? $this->option('model') ?? 'default';
+            $name = "{$target->key()}/{$provider}/{$model}";
+        } else {
+            $version = $event->metadata->promptVersion ?? 'dev';
+            $model = $event->metadata->model ?? $this->option('model') ?? $this->option('provider') ?? 'default';
+            $name = "{$target->key()}/v{$version}/{$model}";
+        }
 
         if (filled($this->option('tag'))) {
             $name .= '/tag-'.$this->option('tag');
@@ -436,7 +450,7 @@ abstract class RunEvalCommand extends Command
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function loadDataset(EvalTarget|ClassifierEvalTarget $target, BraintrustApi $braintrust): Collection
+    private function loadDataset(DatasetTarget $target, BraintrustApi $braintrust): Collection
     {
         $dataset = (string) ($this->option('dataset') ?: $target->defaultDataset());
 
@@ -460,7 +474,7 @@ abstract class RunEvalCommand extends Command
      * @param  Collection<int, array<string, mixed>>  $rows
      * @return Collection<int, array<string, mixed>>
      */
-    private function excludeRejectedRows(EvalTarget|ClassifierEvalTarget $target, Collection $rows): Collection
+    private function excludeRejectedRows(DatasetTarget $target, Collection $rows): Collection
     {
         if (! $target instanceof FiltersDatasetRows) {
             return $rows;
@@ -493,7 +507,7 @@ abstract class RunEvalCommand extends Command
             ->values();
     }
 
-    private function outPath(EvalTarget|ClassifierEvalTarget $target): string
+    private function outPath(DatasetTarget $target): string
     {
         $default = rtrim((string) config('ai-companion.eval.output_path', storage_path('app/braintrust')), '/')."/{$target->key()}.ndjson";
 
@@ -503,7 +517,7 @@ abstract class RunEvalCommand extends Command
     /**
      * @param  array<int, array<string, mixed>>  $events
      */
-    private function writeNdjson(EvalTarget|ClassifierEvalTarget $target, array $events): void
+    private function writeNdjson(DatasetTarget $target, array $events): void
     {
         $path = $this->outPath($target);
 

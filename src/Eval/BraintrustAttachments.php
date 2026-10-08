@@ -5,21 +5,24 @@ declare(strict_types=1);
 namespace AgentSoftware\LaravelAiCompanion\Eval;
 
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
-use Laravel\Ai\Files\Base64Document;
-use Laravel\Ai\Files\Base64Image;
+use Illuminate\Support\Facades\File as Filesystem;
 use Laravel\Ai\Files\File;
+use Laravel\Ai\Files\LocalDocument;
+use Laravel\Ai\Files\LocalImage;
 
 /**
  * Replaces every `braintrust_attachment` reference in a dataset row, at any
- * depth, with an SDK file holding its downloaded bytes. Each attachment is
- * downloaded once per instance, so one per eval run keeps repeated photos cheap.
+ * depth, with an SDK file pointing at its download in `$directory`. Files are
+ * local rather than base64 because rows are serialized into each forked
+ * process's environment, which cannot hold image-sized payloads. Each
+ * attachment is downloaded once; the caller deletes the directory after the run.
  */
-final class BraintrustAttachments
+final readonly class BraintrustAttachments
 {
-    /** @var array<string, string> base64 contents keyed by attachment key */
-    private array $downloaded = [];
-
-    public function __construct(private readonly BraintrustApi $api) {}
+    public function __construct(
+        private BraintrustApi $api,
+        private string $directory,
+    ) {}
 
     /**
      * @template TKey of array-key
@@ -44,12 +47,16 @@ final class BraintrustAttachments
         $key = (string) $reference['key'];
         $filename = (string) ($reference['filename'] ?? $key);
         $contentType = (string) ($reference['content_type'] ?? 'application/octet-stream');
+        $path = $this->directory.'/'.sha1($key);
 
-        $this->downloaded[$key] ??= base64_encode($this->api->attachment($key, $filename, $contentType));
+        if (! Filesystem::exists($path)) {
+            Filesystem::ensureDirectoryExists($this->directory, 0700);
+            Filesystem::put($path, $this->api->attachment($key, $filename, $contentType));
+        }
 
         $file = str_starts_with($contentType, 'image/')
-            ? new Base64Image($this->downloaded[$key], $contentType)
-            : new Base64Document($this->downloaded[$key], $contentType);
+            ? new LocalImage($path, $contentType)
+            : new LocalDocument($path, $contentType);
 
         return $file->as($filename);
     }

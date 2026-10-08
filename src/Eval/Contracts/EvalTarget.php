@@ -6,38 +6,14 @@ namespace AgentSoftware\LaravelAiCompanion\Eval\Contracts;
 
 use Laravel\Ai\Contracts\Agent;
 
-interface EvalTarget
+interface EvalTarget extends DatasetTarget
 {
-    /**
-     * Stable key — used for the target argument, the experiment-name prefix, and
-     * the interactive picker value.
-     */
-    public function key(): string;
-
-    /**
-     * Human label shown in the interactive picker and run banner.
-     */
-    public function label(): string;
-
-    /**
-     * Default dataset path (relative to the app base path) when --dataset is not
-     * given.
-     */
-    public function defaultDataset(): string;
-
     /**
      * The text sent to the agent under test for a dataset row.
      *
      * @param  array<string, mixed>  $row
      */
     public function promptInput(array $row): string;
-
-    /**
-     * The scorers that define "good" for this agent.
-     *
-     * @return array<int, Scorer>
-     */
-    public function scorers(): array;
 
     /**
      * Build the agent under test for the environment the harness booted. The

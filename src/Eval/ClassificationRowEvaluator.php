@@ -13,36 +13,40 @@ use Throwable;
 
 /**
  * Classifies a single dataset row and scores the answers — the classification
- * counterpart of {@see RowEvaluator}. Stateless, so it can run inside a forked
- * process by a ConcurrencyRunner.
+ * counterpart of {@see RowEvaluator}. Holds no reference to the calling
+ * Command, so it can run inside a forked process by a ConcurrencyRunner.
  */
 final readonly class ClassificationRowEvaluator
 {
+    public function __construct(
+        private ClassifierEvalTarget $target,
+        private Evaluator $evaluator,
+        private ?string $provider,
+        private ?string $model,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $row
      */
-    public function evaluate(
-        array $row,
-        ClassifierEvalTarget $target,
-        Evaluator $evaluator,
-        ?string $provider,
-        ?string $model,
-    ): RowEvaluationResult {
-        $case = $target->classification($row);
-        $expected = array_map(fn (ExpectedAnswer $answer): array => $answer->toArray(), $case->expected);
+    public function evaluate(array $row): RowEvaluationResult
+    {
+        $case = null;
 
         try {
+            $case = $this->target->classification($row);
+            $expected = array_map(fn (ExpectedAnswer $answer): array => $answer->toArray(), $case->expected);
+
             $startedAt = microtime(true);
             $response = Classification::of($case->state, $case->attachments)
                 ->questions($case->questions)
-                ->classify($provider, $model);
+                ->classify($this->provider, $this->model);
             $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
 
             $output = array_map(fn (Answer $answer): array => $answer->toArray(), $response->answers);
 
-            $scores = $evaluator->evaluate(new EvalSubject(
+            $scores = $this->evaluator->evaluate(new EvalSubject(
                 output: $output,
-                input: ['state' => $case->state, 'expected' => $expected],
+                input: ['state' => $case->state],
                 answers: $response->answers,
                 expectedAnswers: $case->expected,
             ));
@@ -75,9 +79,11 @@ final readonly class ClassificationRowEvaluator
                 failure: null,
             );
         } catch (Throwable $exception) {
+            $label = $case === null ? $row : $case->state;
+
             return new RowEvaluationResult(
                 event: null,
-                failure: sprintf('%s — %s', Str::limit(is_string($case->state) ? $case->state : (string) json_encode($case->state), 40), $exception->getMessage()),
+                failure: sprintf('%s — %s', Str::limit(is_string($label) ? $label : (string) json_encode($label), 40), $exception->getMessage()),
             );
         }
     }

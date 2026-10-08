@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\BraintrustAttachments;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
+use AgentSoftware\LaravelAiCompanion\Eval\LaravelConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
+use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\AttachmentContentLength;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ClassifierStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\RecordingConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StubEvalCommand;
@@ -14,8 +16,8 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Classification;
-use Laravel\Ai\Files\Base64Document;
-use Laravel\Ai\Files\Base64Image;
+use Laravel\Ai\Files\LocalDocument;
+use Laravel\Ai\Files\LocalImage;
 use Laravel\Ai\Prompts\ClassificationPrompt;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 
@@ -44,7 +46,7 @@ function fakeBraintrustAttachmentApi(array $extra = []): void
 }
 
 it('loads every row of a named dataset across pages', function (): void {
-    $events = array_map(fn (int $i): array => ['input' => ['report' => "row {$i}"], 'expected' => ['set' => 'must_catch'], 'tags' => null], range(1, 100));
+    $events = array_map(fn (int $i): array => ['id' => "row-{$i}", 'input' => ['report' => "row {$i}"], 'expected' => ['set' => 'must_catch'], 'tags' => null], range(1, 100));
 
     Http::fake([
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
@@ -52,21 +54,35 @@ it('loads every row of a named dataset across pages', function (): void {
         'api.braintrust.dev/v1/dataset/ds-1/fetch' => Http::sequence()
             ->push(['events' => $events, 'cursor' => 'page-2'])
             ->push(['events' => [
-                ['input' => 'a plain prompt', 'expected' => null, 'tags' => ['keep']],
-                ['input' => ['report' => 'own', 'expected' => 'mine'], 'expected' => 'theirs'],
-            ], 'cursor' => 'page-3']),
+                ['id' => 'row-101', 'input' => 'a plain prompt', 'expected' => false, 'tags' => ['keep']],
+                ['id' => 'row-102', 'input' => ['report' => 'own', 'expected' => 'mine'], 'expected' => 'theirs'],
+            ], 'cursor' => 'page-3'])
+            ->push(['events' => []]),
     ]);
 
-    $rows = new BraintrustApi()->datasetRows('maintenance-hazard-photos');
+    $rows = new BraintrustApi()->datasetRows('photo-reports');
 
     expect($rows)->toHaveCount(102)
         ->and($rows[0])->toBe(['report' => 'row 1', 'expected' => ['set' => 'must_catch']])
-        ->and($rows[100])->toBe(['input' => 'a plain prompt', 'tags' => ['keep']])
+        ->and($rows[100])->toBe(['input' => 'a plain prompt', 'expected' => false, 'tags' => ['keep']])
         ->and($rows[101])->toBe(['report' => 'own', 'expected' => 'mine']);
 
-    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'dataset_name=maintenance-hazard-photos')
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'dataset_name=photo-reports')
         && str_contains($request->url(), 'project_id=proj-1'));
-    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/fetch') && ($request->data()['cursor'] ?? null) === 'page-2');
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/fetch') && ($request->data()['cursor'] ?? null) === 'page-3');
+});
+
+it('keeps going while pages come back short, and drops older versions of a row', function (): void {
+    Http::fake([
+        'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1']),
+        'api.braintrust.dev/v1/dataset?*' => Http::response(['objects' => [['id' => 'ds-1']]]),
+        'api.braintrust.dev/v1/dataset/ds-1/fetch' => Http::sequence()
+            ->push(['events' => [['id' => 'a', 'input' => ['report' => 'edited']]], 'cursor' => 'page-2'])
+            ->push(['events' => [['id' => 'a', 'input' => ['report' => 'original']], ['id' => 'b', 'input' => ['report' => 'second']]], 'cursor' => 'page-3'])
+            ->push(['events' => [], 'cursor' => null]),
+    ]);
+
+    expect(new BraintrustApi()->datasetRows('photo-reports'))->toBe([['report' => 'edited'], ['report' => 'second']]);
 });
 
 it('fails loudly when the named dataset does not exist', function (): void {
@@ -100,24 +116,43 @@ it('refuses an attachment that has not finished uploading', function (): void {
     new BraintrustApi()->attachment('att-1', 'meter.jpg', 'image/jpeg');
 })->throws(RuntimeException::class, 'Braintrust attachment [meter.jpg] is not uploaded yet.');
 
-it('replaces nested attachment references with files, downloading each one once', function (): void {
+it('replaces nested attachment references with local files, downloading each one once', function (): void {
     fakeBraintrustAttachmentApi();
+    $directory = sys_get_temp_dir().'/braintrust-attachments-'.getmypid();
 
-    $attachments = new BraintrustAttachments(new BraintrustApi);
+    $attachments = new BraintrustAttachments(new BraintrustApi, $directory);
 
     $first = $attachments->resolve(['report' => 'gas', 'photos' => [braintrustPhotoReference()], 'meta' => ['n' => 1]]);
     $second = $attachments->resolve(['photos' => [braintrustPhotoReference(), braintrustPhotoReference('att-2', 'lease.pdf', 'application/pdf')]]);
 
     expect($first['report'])->toBe('gas')
         ->and($first['meta'])->toBe(['n' => 1])
-        ->and($first['photos'][0])->toBeInstanceOf(Base64Image::class)
+        ->and($first['photos'][0])->toBeInstanceOf(LocalImage::class)
+        ->and($first['photos'][0]->path)->toStartWith($directory.'/')
         ->and($first['photos'][0]->content())->toBe('bytes-of-att-1')
-        ->and($first['photos'][0]->mime)->toBe('image/jpeg')
+        ->and($first['photos'][0]->mimeType())->toBe('image/jpeg')
         ->and($first['photos'][0]->name())->toBe('meter.jpg')
-        ->and($second['photos'][1])->toBeInstanceOf(Base64Document::class)
+        ->and($second['photos'][1])->toBeInstanceOf(LocalDocument::class)
         ->and($second['photos'][1]->content())->toBe('bytes-of-att-2');
 
     expect(Http::recorded(fn (Request $request): bool => $request->url() === 'https://bucket.test/att-1'))->toHaveCount(1);
+
+    File::deleteDirectory($directory);
+});
+
+it('hands a forked process a photo-sized attachment without overflowing its environment', function (): void {
+    Http::fake([
+        'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1', 'org_id' => 'org-1']),
+        'api.braintrust.dev/attachment?*' => Http::response(['downloadUrl' => 'https://bucket.test/att-1', 'status' => ['upload_status' => 'done']]),
+        'bucket.test/*' => Http::response(str_repeat('x', 2_000_000)),
+    ]);
+    $directory = sys_get_temp_dir().'/braintrust-attachments-fork-'.getmypid();
+
+    $row = new BraintrustAttachments(new BraintrustApi, $directory)->resolve(['photo' => braintrustPhotoReference()]);
+
+    expect(new LaravelConcurrencyRunner()->run([AttachmentContentLength::task($row['photo'])], 60))->toBe([2_000_000]);
+
+    File::deleteDirectory($directory);
 });
 
 it('runs a classifier eval over a Braintrust dataset with its photos attached', function (): void {
@@ -130,20 +165,25 @@ it('runs a classifier eval over a Braintrust dataset with its photos attached', 
     fakeBraintrustAttachmentApi([
         'api.braintrust.dev/v1/dataset?*' => Http::response(['objects' => [['id' => 'ds-1']]]),
         'api.braintrust.dev/v1/dataset/ds-1/fetch' => Http::response(['events' => [
-            ['input' => ['decision' => 'hazard', 'state' => 'Smell of gas', 'attachments' => [braintrustPhotoReference()]], 'expected' => ['gas' => true]],
+            ['id' => 'row-1', 'input' => ['decision' => 'hazard', 'state' => 'Smell of gas', 'attachments' => [braintrustPhotoReference()]], 'expected' => ['gas' => true]],
         ]]),
     ]);
     Classification::fake([['gas' => new BooleanAnswer(0.9)]]);
 
     $out = sys_get_temp_dir().'/braintrust-dataset-'.getmypid().'.ndjson';
 
-    $this->artisan('stub:eval', ['target' => 'stub-classifier', '--dataset' => 'braintrust:maintenance-hazard-photos', '--provider' => 'openai', '--out' => $out])
+    $this->artisan('stub:eval', ['target' => 'stub-classifier', '--dataset' => 'braintrust:photo-reports', '--provider' => 'openai', '--out' => $out])
         ->assertSuccessful();
 
-    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->attachments[0] instanceof Base64Image
-        && $prompt->attachments[0]->content() === 'bytes-of-att-1');
+    $photo = null;
+    Classification::assertClassified(function (ClassificationPrompt $prompt) use (&$photo): bool {
+        $photo = $prompt->attachments[0];
 
-    expect((float) json_decode(File::get($out), true)['scores']['gas'])->toBe(1.0);
+        return $photo instanceof LocalImage && $photo->name() === 'meter.jpg';
+    });
+
+    expect((float) json_decode(File::get($out), true)['scores']['gas'])->toBe(1.0)
+        ->and(File::exists(dirname($photo->path)))->toBeFalse();
 
     File::delete($out);
 });
