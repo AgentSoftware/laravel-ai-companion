@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 use AgentSoftware\LaravelAiCompanion\Eval\BraintrustAttachments;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
-use AgentSoftware\LaravelAiCompanion\Eval\LaravelConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
-use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\AttachmentContentLength;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\ClassifierStubTarget;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\RecordingConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Tests\Support\Eval\StubEvalCommand;
@@ -140,7 +138,7 @@ it('replaces nested attachment references with local files, downloading each one
     File::deleteDirectory($directory);
 });
 
-it('hands a forked process a photo-sized attachment without overflowing its environment', function (): void {
+it('keeps a photo-sized attachment out of the row a forked process is handed', function (): void {
     Http::fake([
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1', 'org_id' => 'org-1']),
         'api.braintrust.dev/attachment?*' => Http::response(['downloadUrl' => 'https://bucket.test/att-1', 'status' => ['upload_status' => 'done']]),
@@ -150,7 +148,9 @@ it('hands a forked process a photo-sized attachment without overflowing its envi
 
     $row = new BraintrustAttachments(new BraintrustApi, $directory)->resolve(['photo' => braintrustPhotoReference()]);
 
-    expect(new LaravelConcurrencyRunner()->run([AttachmentContentLength::task($row['photo'])], 60))->toBe([2_000_000]);
+    // The process driver passes each task through an environment variable, capped at 128 KB on Linux.
+    expect(strlen(serialize($row)))->toBeLessThan(1_000)
+        ->and(strlen(unserialize(serialize($row))['photo']->content()))->toBe(2_000_000);
 
     File::deleteDirectory($directory);
 });
