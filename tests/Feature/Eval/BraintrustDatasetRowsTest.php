@@ -13,6 +13,7 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Files\LocalDocument;
 use Laravel\Ai\Files\LocalImage;
@@ -61,9 +62,9 @@ it('loads every row of a named dataset across pages', function (): void {
     $rows = new BraintrustApi()->datasetRows('photo-reports');
 
     expect($rows)->toHaveCount(102)
-        ->and($rows[0])->toBe(['report' => 'row 1', 'expected' => ['set' => 'must_catch']])
-        ->and($rows[100])->toBe(['input' => 'a plain prompt', 'expected' => false, 'tags' => ['keep']])
-        ->and($rows[101])->toBe(['report' => 'own', 'expected' => 'mine']);
+        ->and($rows[0])->toBe(['report' => 'row 1', 'id' => 'row-1', 'expected' => ['set' => 'must_catch']])
+        ->and($rows[100])->toBe(['input' => 'a plain prompt', 'id' => 'row-101', 'expected' => false, 'tags' => ['keep']])
+        ->and($rows[101])->toBe(['report' => 'own', 'expected' => 'mine', 'id' => 'row-102']);
 
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'dataset_name=photo-reports')
         && str_contains($request->url(), 'project_id=proj-1'));
@@ -80,7 +81,7 @@ it('keeps going while pages come back short, and drops older versions of a row',
             ->push(['events' => [], 'cursor' => null]),
     ]);
 
-    expect(new BraintrustApi()->datasetRows('photo-reports'))->toBe([['report' => 'edited'], ['report' => 'second']]);
+    expect(new BraintrustApi()->datasetRows('photo-reports'))->toBe([['report' => 'edited', 'id' => 'a'], ['report' => 'second', 'id' => 'b']]);
 });
 
 it('fails loudly when the named dataset does not exist', function (): void {
@@ -156,7 +157,6 @@ it('keeps a photo-sized attachment out of the row a forked process is handed', f
 });
 
 it('runs a classifier eval over a Braintrust dataset with its photos attached', function (): void {
-    config()->set('ai-companion.braintrust.api_key', null);
     config()->set('ai-companion.eval.harness', StubHarness::class);
     config()->set('ai-companion.eval.targets', [ClassifierStubTarget::class]);
     $this->app[Kernel::class]->registerCommand(new StubEvalCommand);
@@ -167,12 +167,13 @@ it('runs a classifier eval over a Braintrust dataset with its photos attached', 
         'api.braintrust.dev/v1/dataset/ds-1/fetch' => Http::response(['events' => [
             ['id' => 'row-1', 'input' => ['decision' => 'hazard', 'state' => 'Smell of gas', 'attachments' => [braintrustPhotoReference()]], 'expected' => ['gas' => true]],
         ]]),
+        'api.braintrust.dev/v1/experiment' => Http::response(['id' => 'exp-1']),
+        'api.braintrust.dev/v1/experiment/exp-1/insert' => Http::response(['row_ids' => ['1']]),
     ]);
+    Process::fake();
     Classification::fake([['gas' => new BooleanAnswer(0.9)]]);
 
-    $out = sys_get_temp_dir().'/braintrust-dataset-'.getmypid().'.ndjson';
-
-    $this->artisan('stub:eval', ['target' => 'stub-classifier', '--dataset' => 'braintrust:photo-reports', '--provider' => 'openai', '--out' => $out])
+    $this->artisan('stub:eval', ['target' => 'stub-classifier', '--dataset' => 'braintrust:photo-reports', '--provider' => 'openai', '--model' => 'gpt-test'])
         ->assertSuccessful();
 
     $photo = null;
@@ -182,8 +183,11 @@ it('runs a classifier eval over a Braintrust dataset with its photos attached', 
         return $photo instanceof LocalImage && $photo->name() === 'meter.jpg';
     });
 
-    expect((float) json_decode(File::get($out), true)['scores']['gas'])->toBe(1.0)
-        ->and(File::exists(dirname($photo->path)))->toBeFalse();
+    expect(File::exists(dirname($photo->path)))->toBeFalse();
 
-    File::delete($out);
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/v1/experiment')
+        && $request->data()['name'] === 'stub-classifier/photo-reports/openai/gpt-test');
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/insert')
+        && (float) $request->data()['events'][0]['scores']['gas'] === 1.0
+        && $request->data()['events'][0]['metadata']['row_id'] === 'row-1');
 });

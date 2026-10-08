@@ -62,7 +62,7 @@ it('classifies each row, scores the answers, and writes them with the expected a
         ['gas' => new BooleanAnswer(0.9)],
     ]);
     writeClassifierDataset([
-        ['decision' => 'priority', 'state' => 'The boiler is leaking', 'expected' => ['priority' => 'urgent'], 'tags' => ['priority']],
+        ['id' => 'boiler-leak', 'decision' => 'priority', 'state' => 'The boiler is leaking', 'expected' => ['priority' => 'urgent'], 'tags' => ['priority']],
         ['decision' => 'hazard', 'state' => ['report' => 'I can smell gas'], 'expected' => ['gas' => ['answer' => true, 'tag' => 'must_catch']]],
     ]);
 
@@ -78,6 +78,8 @@ it('classifies each row, scores the answers, and writes them with the expected a
         ->and($priority['scores'])->not->toHaveKey('gas')
         ->and($priority['metadata']['provider'])->toBe('typesafe')
         ->and($priority['metadata']['tags'])->toBe(['priority'])
+        ->and($priority['metadata']['row_id'])->toBe('boiler-leak')
+        ->and($hazard['metadata']['row_id'])->toBeNull()
         ->and($hazard['input']['state'])->toBe(['report' => 'I can smell gas'])
         ->and((float) $hazard['output']['gas']['probability'])->toBe(0.9)
         ->and($hazard['expected'])->toBe(['gas' => ['answer' => true, 'tag' => 'must_catch']])
@@ -101,7 +103,7 @@ it('runs the classification against the provider and model given on the command 
         ->toMatchArray(['provider' => 'openai', 'model' => 'gpt-test']);
 });
 
-it('names the Braintrust experiment after the provider and model', function (): void {
+it('names the Braintrust experiment after the dataset, provider and model', function (): void {
     config()->set('ai-companion.braintrust.api_key', 'k');
 
     Http::fake([
@@ -118,7 +120,7 @@ it('names the Braintrust experiment after the provider and model', function (): 
         ->assertSuccessful();
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/v1/experiment')
-        && $request->data()['name'] === 'stub-classifier/openai/gpt-test');
+        && $request->data()['name'] === 'stub-classifier/'.pathinfo(classifierDatasetPath(), PATHINFO_FILENAME).'/openai/gpt-test');
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/insert')
         && $request->data()['events'][0]['input']['state'] === 'I can smell gas'

@@ -28,6 +28,25 @@ it('reads bare and tagged expected answers from a dataset row', function (): voi
         ->and($expected['gas']->toArray())->toBe(['answer' => true, 'tag' => 'must_catch']);
 });
 
+it('reads the acceptable choices of an expected answer', function (): void {
+    $expected = ExpectedAnswer::fromDataset(['priority' => ['answer' => 'urgent', 'acceptable' => ['emergency']]])['priority'];
+
+    expect($expected->acceptable)->toBe(['emergency'])
+        ->and($expected->accepts('urgent'))->toBeTrue()
+        ->and($expected->accepts('emergency'))->toBeTrue()
+        ->and($expected->accepts('routine'))->toBeFalse()
+        ->and($expected->toArray())->toBe(['answer' => 'urgent', 'acceptable' => ['emergency']]);
+});
+
+it('rejects acceptable answers that are not a list of choices for a choice question', function (array $value): void {
+    ExpectedAnswer::fromDataset(['priority' => $value]);
+})->with([
+    'not a list' => [['answer' => 'urgent', 'acceptable' => 'emergency']],
+    'keyed' => [['answer' => 'urgent', 'acceptable' => ['a' => 'emergency']]],
+    'not choices' => [['answer' => 'urgent', 'acceptable' => [1]]],
+    'on a boolean question' => [['answer' => true, 'acceptable' => ['yes']]],
+])->throws(InvalidArgumentException::class, 'Acceptable answers must be a list of choices for a choice question');
+
 it('rejects an unknown expected answer tag rather than dropping the gate', function (): void {
     ExpectedAnswer::fromDataset(['gas' => ['answer' => true, 'tag' => 'must_cath']]);
 })->throws(ValueError::class);
@@ -127,3 +146,26 @@ it('refuses a boolean question whose expected answer is not true or false', func
 it('refuses a choice question whose expected answer is not an option', function (): void {
     new ChoiceAnswerScorer('priority')->score(classifiedSubject(['priority' => new ChoiceAnswer('urgent', [])], ['priority' => true]));
 })->throws(InvalidArgumentException::class, 'The expected answer for choice question [priority] must be one of its options.');
+
+it('counts any acceptable choice as right on the acceptable score', function (): void {
+    $scorer = new ChoiceAnswerScorer('priority', acceptable: true);
+    $expected = ['priority' => ['answer' => 'urgent', 'acceptable' => ['emergency']]];
+
+    $close = $scorer->score(classifiedSubject(['priority' => new ChoiceAnswer('emergency', ['urgent' => 0.4, 'emergency' => 0.6], 0.6)], $expected));
+    $wrong = $scorer->score(classifiedSubject(['priority' => new ChoiceAnswer('routine', ['routine' => 1.0], 1.0)], $expected));
+    $exact = new ChoiceAnswerScorer('priority')->score(classifiedSubject(['priority' => new ChoiceAnswer('emergency', [], 0.6)], $expected));
+
+    expect($close->name)->toBe('priority_acceptable')
+        ->and($close->score)->toBe(1.0)
+        ->and($close->metadata['acceptable'])->toBe(['emergency'])
+        ->and($close->metadata)->not->toHaveKey('confusion')
+        ->and($wrong->score)->toBe(0.0)
+        ->and($exact->score)->toBe(0.0);
+});
+
+it('skips the acceptable score for a row that expects nothing for the question', function (): void {
+    $score = new ChoiceAnswerScorer('priority', acceptable: true)->score(classifiedSubject([], []));
+
+    expect($score->skipped)->toBeTrue()
+        ->and($score->name)->toBe('priority_acceptable');
+});

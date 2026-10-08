@@ -108,19 +108,18 @@ final readonly class RowEvaluator
             $scores = $this->evaluator->evaluate($subject);
 
             $promptName = $loggable['prompt_name'] ?? null;
-            $tags = $row['tags'] ?? null;
 
             return new RowEvaluationResult(
                 event: new ExperimentEventData(
                     input: ['input' => $input],
                     output: $output,
                     scores: $scores,
-                    metadata: new EvalRunMetadata(
+                    metadata: EvalRunMetadata::forRow(
+                        $row,
                         promptName: is_string($promptName) ? $promptName : null,
                         promptVersion: $this->scalarOrNull($loggable['prompt_version'] ?? null),
                         model: $meta->model,
                         provider: $meta->provider,
-                        tags: is_array($tags) ? array_values(array_filter($tags, 'is_string')) : [],
                     ),
                     metrics: new EvalRunMetrics(
                         latencyMs: $latencyMs,

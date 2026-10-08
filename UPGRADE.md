@@ -9,12 +9,14 @@ If you override `RunEvalCommand::handle()`, it now also takes a `BraintrustApi`.
 ### Added
 
 - `Eval\Contracts\ClassifierEvalTarget`: evaluate a `Laravel\Ai\Classification` over a dataset with `ai:eval`, against the provider and model from `--provider` / `--model`. Rows map to an `Eval\ClassificationCase` (state, questions, expected answers, attachments). Classifier targets need no harness.
-- `Eval\Scorers\ChoiceAnswerScorer` and `Eval\Scorers\BooleanAnswerScorer`, including must-catch / must-pass scores driven by `Eval\ExpectedAnswerTag`.
+- `Eval\Scorers\ChoiceAnswerScorer` and `Eval\Scorers\BooleanAnswerScorer`, including must-catch / must-pass scores driven by `Eval\ExpectedAnswerTag`, and an acceptable-choices score for choice questions.
+- A dataset row's `id` is exported as `metadata.row_id`.
 - `--dataset=braintrust:<name>` loads an eval dataset from the configured Braintrust project at run time, and `braintrust_attachment` references in any dataset row are downloaded to a temporary directory for the run and replaced with SDK files (`Eval\BraintrustAttachments`).
 - `Score::$blocking`: a measured blocking score below 1.0 fails the eval command. A classification row that fails to run also fails it.
 
 ### Changed
 
+- Experiment names include the dataset: `{key}/{dataset}/v{prompt}/{model}` for agent targets (was `{key}/v{prompt}/{model}`). Runs against different datasets no longer share a name and get told apart only by Braintrust's random suffix.
 - The eval command prints each score's mean, and a confusion matrix for scores that record `confusion` metadata, after the results table for every target.
 - The interactive target picker asks "Which target do you want to eval?".
 

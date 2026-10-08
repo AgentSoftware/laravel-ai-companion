@@ -51,8 +51,6 @@ final readonly class ClassificationRowEvaluator
                 expectedAnswers: $case->expected,
             ));
 
-            $tags = $row['tags'] ?? null;
-
             return new RowEvaluationResult(
                 event: new ExperimentEventData(
                     input: [
@@ -61,12 +59,12 @@ final readonly class ClassificationRowEvaluator
                     ],
                     output: $output,
                     scores: $scores,
-                    metadata: new EvalRunMetadata(
+                    metadata: EvalRunMetadata::forRow(
+                        $row,
                         promptName: null,
                         promptVersion: null,
                         model: $response->meta->model,
                         provider: $response->meta->provider,
-                        tags: is_array($tags) ? array_values(array_filter($tags, 'is_string')) : [],
                     ),
                     metrics: new EvalRunMetrics(
                         latencyMs: $latencyMs,

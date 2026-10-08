@@ -49,8 +49,8 @@ class BraintrustApi
     /**
      * Every row of a dataset in the configured project, for an eval run. A row
      * is the event's input (wrapped as `input` when it is not an object), with
-     * the event's `expected` and `tags` added when the input does not carry its
-     * own. Attachment references are left as-is for the caller to resolve.
+     * the event's `id`, `expected` and `tags` added when the input does not
+     * carry its own. Attachment references are left as-is for the caller to resolve.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -82,7 +82,11 @@ class BraintrustApi
             $input = $event['input'] ?? null;
 
             return (is_array($input) ? $input : ['input' => $input])
-                + array_filter(['expected' => $event['expected'] ?? null, 'tags' => $event['tags'] ?? null], fn (mixed $value): bool => $value !== null);
+                + array_filter([
+                    'id' => $event['id'],
+                    'expected' => $event['expected'] ?? null,
+                    'tags' => $event['tags'] ?? null,
+                ], fn (mixed $value): bool => $value !== null);
         }, $events));
     }
 

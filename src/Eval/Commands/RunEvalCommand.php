@@ -95,7 +95,8 @@ abstract class RunEvalCommand extends Command
             return self::FAILURE;
         }
 
-        $rows = $this->filterDataset($this->excludeRejectedRows($target, $this->loadDataset($target, $braintrust)));
+        $dataset = (string) ($this->option('dataset') ?: $target->defaultDataset());
+        $rows = $this->filterDataset($this->excludeRejectedRows($target, $this->loadDataset($dataset, $braintrust)));
 
         if ($rows->isEmpty()) {
             error('Dataset is empty, missing, or filtered to nothing.');
@@ -136,7 +137,7 @@ abstract class RunEvalCommand extends Command
             $this->renderSummary($events);
 
             if ($exporter->enabled()) {
-                $experiment = $this->experimentName($target, $first);
+                $experiment = $this->experimentName($target, $dataset, $first);
                 $id = $exporter->export($experiment, $events->all(), $harness?->experimentMetadata() ?? [], $this->repoInfo());
 
                 outro(sprintf('Pushed %d row(s) to Braintrust experiment "%s" (%s).', $events->count(), $experiment, $id));
@@ -389,23 +390,27 @@ abstract class RunEvalCommand extends Command
 
     /**
      * Encode the variables under test into the experiment name so a Braintrust
-     * diff is legible from the name alone: agent, prompt version, model, and a
-     * marker for any partial run. The resolved model is the source of truth — a
-     * model-only override is ignored when the agent declares a provider failover
-     * list, so name the experiment after what actually ran. A classification has
-     * no prompt version and is compared across providers, so it is named by
-     * provider and model instead.
+     * diff is legible from the name alone: target, dataset, prompt version,
+     * model, and a marker for any partial run. The resolved model is the source
+     * of truth — a model-only override is ignored when the agent declares a
+     * provider failover list, so name the experiment after what actually ran. A
+     * classification has no prompt version and is compared across providers,
+     * so it is named by provider and model instead.
      */
-    private function experimentName(DatasetTarget $target, ExperimentEventData $event): string
+    private function experimentName(DatasetTarget $target, string $dataset, ExperimentEventData $event): string
     {
+        $datasetName = str_starts_with($dataset, self::BRAINTRUST_DATASET_PREFIX)
+            ? Str::after($dataset, self::BRAINTRUST_DATASET_PREFIX)
+            : pathinfo($dataset, PATHINFO_FILENAME);
+
         if ($target instanceof ClassifierEvalTarget) {
             $provider = $event->metadata->provider ?? $this->option('provider') ?? 'default';
             $model = $event->metadata->model ?? $this->option('model') ?? 'default';
-            $name = "{$target->key()}/{$provider}/{$model}";
+            $name = "{$target->key()}/{$datasetName}/{$provider}/{$model}";
         } else {
             $version = $event->metadata->promptVersion ?? 'dev';
             $model = $event->metadata->model ?? $this->option('model') ?? $this->option('provider') ?? 'default';
-            $name = "{$target->key()}/v{$version}/{$model}";
+            $name = "{$target->key()}/{$datasetName}/v{$version}/{$model}";
         }
 
         if (filled($this->option('tag'))) {
@@ -450,10 +455,8 @@ abstract class RunEvalCommand extends Command
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function loadDataset(DatasetTarget $target, BraintrustApi $braintrust): Collection
+    private function loadDataset(string $dataset, BraintrustApi $braintrust): Collection
     {
-        $dataset = (string) ($this->option('dataset') ?: $target->defaultDataset());
-
         if (str_starts_with($dataset, self::BRAINTRUST_DATASET_PREFIX)) {
             return collect($braintrust->datasetRows(Str::after($dataset, self::BRAINTRUST_DATASET_PREFIX)));
         }

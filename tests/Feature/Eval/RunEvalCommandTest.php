@@ -63,7 +63,7 @@ function readNdjson(string $path): array
 
 it('scores a structured target and writes scored NDJSON', function (): void {
     StructuredStubAgent::fake([['name' => 'Spring Sale Event']]);
-    writeEvalDataset([['brief' => 'a spring sale', 'tags' => ['sale']]]);
+    writeEvalDataset([['id' => 7, 'brief' => 'a spring sale', 'tags' => ['sale']]]);
 
     $this->artisan('stub:eval', ['target' => 'stub'])->assertSuccessful();
 
@@ -76,7 +76,8 @@ it('scores a structured target and writes scored NDJSON', function (): void {
         ->and((float) $rows[0]['scores']['gamma'])->toBe(0.3)
         ->and($rows[0]['metadata']['prompt_name'])->toBe('stub')
         ->and($rows[0]['metadata']['prompt_version'])->toBe(2)
-        ->and($rows[0]['metadata']['tags'])->toBe(['sale']);
+        ->and($rows[0]['metadata']['tags'])->toBe(['sale'])
+        ->and($rows[0]['metadata']['row_id'])->toBe(7);
 });
 
 it('omits a skipped score from a row while keeping its reason, and still renders the table', function (): void {
@@ -121,7 +122,7 @@ it('pushes a Braintrust experiment named after the target', function (): void {
     expect(File::exists(storage_path('app/braintrust/stub.ndjson')))->toBeFalse();
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/v1/experiment')
-        && str_starts_with($request->data()['name'], 'stub/')
+        && str_starts_with($request->data()['name'], 'stub/eval-dataset/v')
         && str_contains($request->data()['name'], 'tag-keep')
         && str_contains($request->data()['name'], 'first-1')
         && $request->data()['repo_info']['branch'] === 'feature/x'
