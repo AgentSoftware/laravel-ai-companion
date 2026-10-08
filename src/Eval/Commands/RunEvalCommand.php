@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Commands;
 
+use AgentSoftware\LaravelAiCompanion\Eval\ClassificationRowEvaluator;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ClassifierEvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalTarget;
@@ -14,6 +16,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
 use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
 use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluationResult;
 use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluator;
+use AgentSoftware\LaravelAiCompanion\Eval\Score;
 use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -30,8 +33,9 @@ use function Laravel\Prompts\table;
 use function Laravel\Prompts\warning;
 
 /**
- * Runs an AI agent over an eval dataset, scores each output, and pushes a
- * Braintrust experiment (or writes scored NDJSON when no API key is set).
+ * Runs an AI agent (or a classification) over an eval dataset, scores each
+ * output, and pushes a Braintrust experiment (or writes scored NDJSON when no
+ * API key is set).
  *
  * App-agnostic: the targets to run and the throwaway-world bootstrap come from
  * config (`ai-companion.eval.targets` and `ai-companion.eval.harness`). Extend
@@ -104,21 +108,20 @@ abstract class RunEvalCommand extends Command
         }
 
         $this->renderResults($events);
+        $this->renderSummary($events);
 
         if ($exporter->enabled()) {
             $experiment = $this->experimentName($target, $first);
             $id = $exporter->export($experiment, $events->all(), $harness->experimentMetadata(), $this->repoInfo());
 
             outro(sprintf('Pushed %d row(s) to Braintrust experiment "%s" (%s).', $events->count(), $experiment, $id));
+        } else {
+            $this->writeNdjson($target, $events->map(fn (ExperimentEventData $event): array => $event->toArray())->all());
 
-            return self::SUCCESS;
+            outro(sprintf('No Braintrust API key — wrote %d row(s) to %s', $events->count(), $this->outPath($target)));
         }
 
-        $this->writeNdjson($target, $events->map(fn (ExperimentEventData $event): array => $event->toArray())->all());
-
-        outro(sprintf('No Braintrust API key — wrote %d row(s) to %s', $events->count(), $this->outPath($target)));
-
-        return self::SUCCESS;
+        return $this->failOnBlockingMisses($events);
     }
 
     private function harness(): ?EvalHarness
@@ -134,14 +137,14 @@ abstract class RunEvalCommand extends Command
         return $harness instanceof EvalHarness ? $harness : null;
     }
 
-    private function resolveTarget(): ?EvalTarget
+    private function resolveTarget(): EvalTarget|ClassifierEvalTarget|null
     {
         $classes = array_values(array_filter((array) config('ai-companion.eval.targets', []), 'is_string'));
 
-        /** @var Collection<string, EvalTarget> $targets */
+        /** @var Collection<string, EvalTarget|ClassifierEvalTarget> $targets */
         $targets = collect($classes)
-            ->map(fn (string $class): EvalTarget => app($class))
-            ->keyBy(fn (EvalTarget $target): string => $target->key());
+            ->map(fn (string $class): EvalTarget|ClassifierEvalTarget => app($class))
+            ->keyBy(fn (EvalTarget|ClassifierEvalTarget $target): string => $target->key());
 
         if ($targets->isEmpty()) {
             error('No eval targets configured. Add EvalTarget classes to ai-companion.eval.targets.');
@@ -151,7 +154,7 @@ abstract class RunEvalCommand extends Command
 
         $key = $this->argument('target') ?? select(
             label: 'Which agent do you want to eval?',
-            options: $targets->map(fn (EvalTarget $target): string => $target->label())->all(),
+            options: $targets->map(fn (EvalTarget|ClassifierEvalTarget $target): string => $target->label())->all(),
         );
 
         $target = $targets->get($key);
@@ -174,12 +177,13 @@ abstract class RunEvalCommand extends Command
      */
     private function runConcurrently(
         Collection $runs,
-        EvalTarget $target,
+        EvalTarget|ClassifierEvalTarget $target,
         Evaluator $evaluator,
         EvalHarness $harness,
         ConcurrencyRunner $concurrency,
     ): Collection {
         $rowEvaluator = new RowEvaluator;
+        $classificationEvaluator = new ClassificationRowEvaluator;
         $provider = $this->option('provider');
         $model = $this->option('model');
         $batchSize = min(self::MAX_CONCURRENCY, max(1, (int) $this->option('concurrency')));
@@ -203,9 +207,11 @@ abstract class RunEvalCommand extends Command
             // checkmarks, em dashes), so this isn't an edge case — base64 keeps the
             // wire bytes ASCII-only regardless of how the pipe chunks them.
             $tasks = $batch
-                ->map(function (array $row) use ($rowEvaluator, $target, $evaluator, $harness, $provider, $model): Closure {
-                    return function () use ($rowEvaluator, $row, $target, $evaluator, $harness, $provider, $model): string {
-                        $result = $rowEvaluator->evaluate($row, $target, $evaluator, $harness, $provider, $model);
+                ->map(function (array $row) use ($rowEvaluator, $classificationEvaluator, $target, $evaluator, $harness, $provider, $model): Closure {
+                    return function () use ($rowEvaluator, $classificationEvaluator, $row, $target, $evaluator, $harness, $provider, $model): string {
+                        $result = $target instanceof ClassifierEvalTarget
+                            ? $classificationEvaluator->evaluate($row, $target, $evaluator, $provider, $model)
+                            : $rowEvaluator->evaluate($row, $target, $evaluator, $harness, $provider, $model);
 
                         return base64_encode(serialize($result));
                     };
@@ -259,7 +265,7 @@ abstract class RunEvalCommand extends Command
             $values = $event->scoreValues();
 
             return [
-                Str::limit((string) ($event->input['input'] ?? ''), 38),
+                Str::limit($this->inputLabel($event), 38),
                 ...$scoreNames->map(fn (string $name): string => $this->scoreCell($values[$name] ?? null))->all(),
                 (string) $event->metrics->latencyMs,
                 (string) $event->metrics->tokens,
@@ -267,6 +273,75 @@ abstract class RunEvalCommand extends Command
         })->all();
 
         table($headers, $rows);
+    }
+
+    /**
+     * Per-score means over the rows each score measured — for a tag-narrowed
+     * classification score that mean is its recall — then a confusion matrix
+     * for every score whose metadata carries `confusion` cells.
+     *
+     * @param  Collection<int, ExperimentEventData>  $events
+     */
+    private function renderSummary(Collection $events): void
+    {
+        $scores = $events
+            ->flatMap(fn (ExperimentEventData $event): array => $event->scores)
+            ->reject(fn (Score $score): bool => $score->skipped)
+            ->groupBy(fn (Score $score): string => $score->name);
+
+        table(['Score', 'Mean', 'Rows'], $scores->map(fn (Collection $group, string $name): array => [
+            Str::headline($name),
+            $this->scoreCell((float) $group->avg(fn (Score $score): float => $score->score)),
+            (string) $group->count(),
+        ])->values()->all());
+
+        $scores->each(function (Collection $group, string $name): void {
+            $cells = $group
+                ->map(fn (Score $score): mixed => $score->metadata['confusion'] ?? null)
+                ->filter(fn (mixed $cell): bool => is_array($cell))
+                ->values();
+
+            if ($cells->isEmpty()) {
+                return;
+            }
+
+            $labels = $cells->flatMap(fn (array $cell): array => [$cell['expected'], $cell['actual']])->unique()->sort()->values();
+
+            info(sprintf('%s — confusion (rows expected, columns actual)', Str::headline($name)));
+            table(['', ...$labels->all()], $labels->map(fn (string $expected): array => [
+                $expected,
+                ...$labels->map(fn (string $actual): string => (string) $cells->where('expected', $expected)->where('actual', $actual)->count())->all(),
+            ])->all());
+        });
+    }
+
+    /**
+     * Fail the run when any blocking score (e.g. a must-catch row) missed, after
+     * the results have been reported and exported.
+     *
+     * @param  Collection<int, ExperimentEventData>  $events
+     */
+    private function failOnBlockingMisses(Collection $events): int
+    {
+        $misses = $events->flatMap(fn (ExperimentEventData $event): array => collect($event->scores)
+            ->filter(fn (Score $score): bool => $score->blocking && ! $score->skipped && $score->score < 1.0)
+            ->map(fn (Score $score): string => sprintf('%s — %s', $score->name, Str::limit($this->inputLabel($event), 60)))
+            ->all());
+
+        if ($misses->isEmpty()) {
+            return self::SUCCESS;
+        }
+
+        error(count($misses).' blocking score(s) missed:'.PHP_EOL.$misses->implode(PHP_EOL));
+
+        return self::FAILURE;
+    }
+
+    private function inputLabel(ExperimentEventData $event): string
+    {
+        $input = $event->input['input'] ?? $event->input['state'] ?? '';
+
+        return is_string($input) ? $input : (string) json_encode($input);
     }
 
     /**
@@ -293,14 +368,18 @@ abstract class RunEvalCommand extends Command
      * diff is legible from the name alone: agent, prompt version, model, and a
      * marker for any partial run. The resolved model is the source of truth — a
      * model-only override is ignored when the agent declares a provider failover
-     * list, so name the experiment after what actually ran.
+     * list, so name the experiment after what actually ran. A classification has
+     * no prompt version and is compared across providers, so it is named by
+     * provider and model instead.
      */
-    private function experimentName(EvalTarget $target, ExperimentEventData $event): string
+    private function experimentName(EvalTarget|ClassifierEvalTarget $target, ExperimentEventData $event): string
     {
         $version = $event->metadata->promptVersion ?? 'dev';
         $model = $event->metadata->model ?? $this->option('model') ?? $this->option('provider') ?? 'default';
 
-        $name = "{$target->key()}/v{$version}/{$model}";
+        $name = $target instanceof ClassifierEvalTarget
+            ? "{$target->key()}/{$event->metadata->provider}/{$model}"
+            : "{$target->key()}/v{$version}/{$model}";
 
         if (filled($this->option('tag'))) {
             $name .= '/tag-'.$this->option('tag');
@@ -344,7 +423,7 @@ abstract class RunEvalCommand extends Command
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function loadDataset(EvalTarget $target): Collection
+    private function loadDataset(EvalTarget|ClassifierEvalTarget $target): Collection
     {
         $path = base_path((string) ($this->option('dataset') ?: $target->defaultDataset()));
 
@@ -362,7 +441,7 @@ abstract class RunEvalCommand extends Command
      * @param  Collection<int, array<string, mixed>>  $rows
      * @return Collection<int, array<string, mixed>>
      */
-    private function excludeRejectedRows(EvalTarget $target, Collection $rows): Collection
+    private function excludeRejectedRows(EvalTarget|ClassifierEvalTarget $target, Collection $rows): Collection
     {
         if (! $target instanceof FiltersDatasetRows) {
             return $rows;
@@ -395,7 +474,7 @@ abstract class RunEvalCommand extends Command
             ->values();
     }
 
-    private function outPath(EvalTarget $target): string
+    private function outPath(EvalTarget|ClassifierEvalTarget $target): string
     {
         $default = rtrim((string) config('ai-companion.eval.output_path', storage_path('app/braintrust')), '/')."/{$target->key()}.ndjson";
 
@@ -405,7 +484,7 @@ abstract class RunEvalCommand extends Command
     /**
      * @param  array<int, array<string, mixed>>  $events
      */
-    private function writeNdjson(EvalTarget $target, array $events): void
+    private function writeNdjson(EvalTarget|ClassifierEvalTarget $target, array $events): void
     {
         $path = $this->outPath($target);
 

@@ -1,5 +1,16 @@
 # Upgrade Guide
 
+## Upgrading To 5.2 From 5.1
+
+Companion 5.2 requires `laravel/ai` 1.2 or later, for its `Classification` API. There are no new migrations, and existing `EvalTarget` implementations are unchanged.
+
+### Added
+
+- `Eval\Contracts\ClassifierEvalTarget`: evaluate a `Laravel\Ai\Classification` over a dataset with `ai:eval`, against the provider and model from `--provider` / `--model`. Rows map to an `Eval\ClassificationCase` (state, questions, expected answers, attachments).
+- `Eval\Scorers\ChoiceAnswerScorer` and `Eval\Scorers\BooleanAnswerScorer`, including must-catch / must-pass scores driven by `Eval\ExpectedAnswerTag`.
+- `Score::$blocking`: a measured blocking score below 1.0 fails the eval command.
+- The eval command prints each score's mean and a confusion matrix for scores that record `confusion` metadata.
+
 ## Upgrading To 5.1 From 5.0
 
 There are no new migrations, and no action is needed unless you read `ExperimentEventData::$expected` directly.

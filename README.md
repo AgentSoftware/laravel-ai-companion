@@ -259,6 +259,60 @@ final class SummaryTarget implements EvalTarget, FiltersDatasetRows
 
 The runner applies `includeRow()` right after loading the dataset, so exclusion happens **before** `--tag` and `--limit` (`--limit=5` means five included rows, not five rows of which some were dropped). It prints `Skipped N rows (excluded by target).` when any rows were excluded.
 
+### Classifier targets
+
+To evaluate a classification (`Laravel\Ai\Classification`) instead of an agent, implement `ClassifierEvalTarget`. It has the same `key()`, `label()`, `defaultDataset()` and `scorers()`, plus `classification()`, which turns a row into the state, the keyed questions, any attachments, and the answers the row expects. The runner classifies each row with `--provider` / `--model`, so one dataset can be compared across TypeSafe, OpenAI and OpenRouter. No harness environment is booted for a classification row (a harness must still be configured; its `experimentMetadata()` is recorded). One target can serve many decisions by switching on a row field:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\ClassificationCase;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ClassifierEvalTarget;
+use AgentSoftware\LaravelAiCompanion\Eval\ExpectedAnswer;
+use AgentSoftware\LaravelAiCompanion\Eval\ExpectedAnswerTag;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\BooleanAnswerScorer;
+use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ChoiceAnswerScorer;
+use Laravel\Ai\Files\File;
+
+final class DecisionTarget implements ClassifierEvalTarget
+{
+    public function key(): string { return 'decisions'; }
+    public function label(): string { return 'Decisions'; }
+    public function defaultDataset(): string { return 'tests/Fixtures/eval/decisions.json'; }
+
+    public function scorers(): array
+    {
+        return [
+            new ChoiceAnswerScorer('priority'),
+            new BooleanAnswerScorer('gas', threshold: 0.5),
+            new BooleanAnswerScorer('gas', tag: ExpectedAnswerTag::MustCatch), // gas_must_catch: recall; a miss fails the run
+            new BooleanAnswerScorer('gas', tag: ExpectedAnswerTag::MustPass),  // gas_must_pass: 1 - false-hold rate
+        ];
+    }
+
+    public function classification(array $row): ClassificationCase
+    {
+        $decision = Decision::for($row['decision'], $row['inputs']); // your own mapping
+
+        return new ClassificationCase(
+            state: $decision->state(),
+            questions: $decision->questions(),
+            expected: ExpectedAnswer::fromDataset($row['expected'] ?? []),
+            attachments: array_map(File::fromArray(...), $row['photos'] ?? []),
+        );
+    }
+}
+```
+
+A row's `expected` is keyed by question: a bare answer, or `{"answer": …, "tag": "must_catch" | "must_pass"}`. Attachments use the SDK's file array shape, e.g. `{"type": "local-image", "path": "…"}`; only providers that support classification attachments (OpenAI) accept them, and a row sent to one that doesn't is reported as a failed run.
+
+```json
+[
+  { "decision": "hazard", "inputs": {"report": "I can smell gas"}, "expected": {"gas": {"answer": true, "tag": "must_catch"}}, "tags": ["hazard"] },
+  { "decision": "priority", "inputs": {"report": "The boiler is leaking"}, "expected": {"priority": "urgent"} }
+]
+```
+
+The run prints each score's mean and a confusion matrix per question, and exports input (state and questions), output (each answer with its probabilities), expected and scores to Braintrust as `{key}/{provider}/{model}`. Any `blocking` score below 1.0 (a missed must-catch row) fails the command after the results are exported.
+
 ### Scorers
 
 A scorer returns a `Score` in the range **0.0–1.0 where 1.0 = good** (the convention Braintrust and the result table assume — encapsulate any inverted polarity inside the scorer). Use the built-ins, or write your own.
@@ -328,6 +382,7 @@ final class EvalCommand extends RunEvalCommand {}
 php artisan app:eval summary            # interactive picker if target omitted
 php artisan app:eval summary --limit=5  # smoke test the first 5 rows
 php artisan app:eval summary --trials=3 # run each row 3x to measure variance
+php artisan app:eval decisions --provider=openai  # a classifier target on another provider
 ```
 
 You get a coloured score table per run. With a Braintrust key set it pushes an experiment named `summary/v{prompt}/{model}` and attaches git metadata so Braintrust auto-selects the previous run on your branch as the baseline. Without a key, scored NDJSON is written to `eval.output_path`.
