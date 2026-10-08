@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion\Eval\Commands;
 
+use AgentSoftware\LaravelAiCompanion\Eval\BraintrustAttachments;
 use AgentSoftware\LaravelAiCompanion\Eval\ClassificationRowEvaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ClassifierEvalTarget;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
@@ -16,6 +17,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
 use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
 use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluationResult;
 use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluator;
+use AgentSoftware\LaravelAiCompanion\Eval\Scaffolding\BraintrustApi;
 use AgentSoftware\LaravelAiCompanion\Eval\Score;
 use Closure;
 use Illuminate\Console\Command;
@@ -57,10 +59,17 @@ abstract class RunEvalCommand extends Command
      */
     private const int DEFAULT_TIMEOUT = 300;
 
+    /**
+     * A --dataset (or defaultDataset()) starting with this prefix names a
+     * Braintrust dataset in the configured project, loaded at run time rather
+     * than read from a file — for rows that must never be committed.
+     */
+    private const string BRAINTRUST_DATASET_PREFIX = 'braintrust:';
+
     /** @var array<int, string> */
     private array $failures = [];
 
-    public function handle(ExperimentExporter $exporter, ConcurrencyRunner $concurrency): int
+    public function handle(ExperimentExporter $exporter, ConcurrencyRunner $concurrency, BraintrustApi $braintrust): int
     {
         $harness = $this->harness();
 
@@ -76,13 +85,17 @@ abstract class RunEvalCommand extends Command
             return self::FAILURE;
         }
 
-        $rows = $this->filterDataset($this->excludeRejectedRows($target, $this->loadDataset($target)));
+        $rows = $this->filterDataset($this->excludeRejectedRows($target, $this->loadDataset($target, $braintrust)));
 
         if ($rows->isEmpty()) {
             error('Dataset is empty, missing, or filtered to nothing.');
 
             return self::FAILURE;
         }
+
+        // Only the rows that will run are resolved, so --tag/--limit skip downloads.
+        $attachments = new BraintrustAttachments($braintrust);
+        $rows = $rows->map(fn (array $row): array => $attachments->resolve($row));
 
         $evaluator = new Evaluator($target->scorers());
         $trials = max(1, (int) $this->option('trials'));
@@ -423,9 +436,15 @@ abstract class RunEvalCommand extends Command
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function loadDataset(EvalTarget|ClassifierEvalTarget $target): Collection
+    private function loadDataset(EvalTarget|ClassifierEvalTarget $target, BraintrustApi $braintrust): Collection
     {
-        $path = base_path((string) ($this->option('dataset') ?: $target->defaultDataset()));
+        $dataset = (string) ($this->option('dataset') ?: $target->defaultDataset());
+
+        if (str_starts_with($dataset, self::BRAINTRUST_DATASET_PREFIX)) {
+            return collect($braintrust->datasetRows(Str::after($dataset, self::BRAINTRUST_DATASET_PREFIX)));
+        }
+
+        $path = base_path($dataset);
 
         if (! File::exists($path)) {
             return collect();

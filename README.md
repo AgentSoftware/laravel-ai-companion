@@ -270,7 +270,6 @@ use AgentSoftware\LaravelAiCompanion\Eval\ExpectedAnswer;
 use AgentSoftware\LaravelAiCompanion\Eval\ExpectedAnswerTag;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\BooleanAnswerScorer;
 use AgentSoftware\LaravelAiCompanion\Eval\Scorers\ChoiceAnswerScorer;
-use Laravel\Ai\Files\File;
 
 final class DecisionTarget implements ClassifierEvalTarget
 {
@@ -296,13 +295,17 @@ final class DecisionTarget implements ClassifierEvalTarget
             state: $decision->state(),
             questions: $decision->questions(),
             expected: ExpectedAnswer::fromDataset($row['expected'] ?? []),
-            attachments: array_map(File::fromArray(...), $row['photos'] ?? []),
+            attachments: $row['photos'] ?? [], // Braintrust attachment references arrive as SDK files
         );
     }
 }
 ```
 
-A row's `expected` is keyed by question: a bare answer, or `{"answer": …, "tag": "must_catch" | "must_pass"}`. Attachments use the SDK's file array shape, e.g. `{"type": "local-image", "path": "…"}`; only providers that support classification attachments (OpenAI) accept them, and a row sent to one that doesn't is reported as a failed run.
+A row's `expected` is keyed by question: a bare answer, or `{"answer": …, "tag": "must_catch" | "must_pass"}`. Only providers that support classification attachments (OpenAI) accept them; a row sent to one that doesn't is reported as a failed run.
+
+#### Datasets in Braintrust
+
+Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `Base64Image` (or `Base64Document`), so the target passes the field straight to `attachments`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`.
 
 ```json
 [
@@ -383,6 +386,7 @@ php artisan app:eval summary            # interactive picker if target omitted
 php artisan app:eval summary --limit=5  # smoke test the first 5 rows
 php artisan app:eval summary --trials=3 # run each row 3x to measure variance
 php artisan app:eval decisions --provider=openai  # a classifier target on another provider
+php artisan app:eval decisions --dataset=braintrust:maintenance-hazard-photos --provider=openai
 ```
 
 You get a coloured score table per run. With a Braintrust key set it pushes an experiment named `summary/v{prompt}/{model}` and attaches git metadata so Braintrust auto-selects the previous run on your branch as the baseline. Without a key, scored NDJSON is written to `eval.output_path`.

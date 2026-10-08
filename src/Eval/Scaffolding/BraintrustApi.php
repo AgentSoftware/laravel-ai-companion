@@ -6,16 +6,22 @@ namespace AgentSoftware\LaravelAiCompanion\Eval\Scaffolding;
 
 use AgentSoftware\LaravelAiCompanion\Braintrust\InteractsWithBraintrustApi;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
 
 /**
  * The single Braintrust-aware client for the eval tooling: scaffolding reads
- * (datasets, dataset events, recent project-log events) and publish writes
- * (scorer functions, invocations, online scoring rules). Everything else
- * speaks neutral shapes — swap operators by replacing this class.
+ * (datasets, dataset events, recent project-log events), eval-run reads
+ * (whole datasets, attachment downloads) and publish writes (scorer functions,
+ * invocations, online scoring rules). Everything else speaks neutral shapes —
+ * swap operators by replacing this class.
  */
 class BraintrustApi
 {
     use InteractsWithBraintrustApi;
+
+    private const int DATASET_PAGE_SIZE = 100;
 
     /** @return array<int, array{id: string, name: string}> */
     public function datasets(): array
@@ -42,6 +48,60 @@ class BraintrustApi
     }
 
     /**
+     * Every row of a dataset in the configured project, for an eval run. A row
+     * is the event's input (wrapped as `input` when it is not an object), with
+     * the event's `expected` and `tags` added when the input does not carry its
+     * own. Attachment references are left as-is for the caller to resolve.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function datasetRows(string $name): array
+    {
+        $datasetId = collect((array) $this->request(fn (): Response => $this->client()
+            ->get('/v1/dataset', ['project_id' => $this->projectId(), 'dataset_name' => $name]))
+            ->json('objects', []))
+            ->value('id') ?? throw new RuntimeException("Braintrust dataset [{$name}] not found in the configured project.");
+
+        $events = [];
+        $cursor = null;
+
+        do {
+            $page = $this->request(fn (): Response => $this->client()
+                ->post("/v1/dataset/{$datasetId}/fetch", array_filter(['limit' => self::DATASET_PAGE_SIZE, 'cursor' => $cursor])));
+            $batch = (array) $page->json('events', []);
+            $events = [...$events, ...$batch];
+            $cursor = $page->json('cursor');
+        } while (count($batch) === self::DATASET_PAGE_SIZE && is_string($cursor));
+
+        return array_map(function (array $event): array {
+            $input = $event['input'] ?? null;
+
+            return (is_array($input) ? $input : ['input' => $input])
+                + array_filter(['expected' => $event['expected'] ?? null, 'tags' => $event['tags'] ?? null]);
+        }, $events);
+    }
+
+    /**
+     * Download a `braintrust_attachment` reference's bytes. The API hands back
+     * a presigned object-store URL, which is fetched without the API key.
+     */
+    public function attachment(string $key, string $filename, string $contentType): string
+    {
+        $metadata = $this->request(fn (): Response => $this->client()->get('/attachment', [
+            'key' => $key,
+            'filename' => $filename,
+            'content_type' => $contentType,
+            'org_id' => $this->orgId(),
+        ]));
+
+        if ($metadata->json('status.upload_status') !== 'done') {
+            throw new RuntimeException("Braintrust attachment [{$filename}] is not uploaded yet.");
+        }
+
+        return Http::timeout(60)->get((string) $metadata->json('downloadUrl'))->throw()->body();
+    }
+
+    /**
      * Recent LLM spans from the project logs, newest first, optionally filtered
      * to one agent. Filtering happens server-side via BTQL — the plain fetch
      * endpoint has no filter, and a busy project's most recent events are
@@ -63,6 +123,18 @@ class BraintrustApi
         return (array) $this->request(fn (): Response => $this->client()
             ->post('/btql', ['query' => $query, 'fmt' => 'json']))
             ->json('data', []);
+    }
+
+    private function orgId(): string
+    {
+        $project = config('ai-companion.braintrust.project') ?? config('app.name');
+
+        return Cache::rememberForever(
+            "ai-companion:braintrust:org-id:{$project}",
+            fn (): string => (string) $this->request(fn (): Response => $this->client()
+                ->post('/v1/project', ['name' => $project]))
+                ->json('org_id'),
+        );
     }
 
     /**

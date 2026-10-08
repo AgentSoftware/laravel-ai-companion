@@ -8,6 +8,7 @@ Companion 5.2 requires `laravel/ai` 1.2 or later, for its `Classification` API. 
 
 - `Eval\Contracts\ClassifierEvalTarget`: evaluate a `Laravel\Ai\Classification` over a dataset with `ai:eval`, against the provider and model from `--provider` / `--model`. Rows map to an `Eval\ClassificationCase` (state, questions, expected answers, attachments).
 - `Eval\Scorers\ChoiceAnswerScorer` and `Eval\Scorers\BooleanAnswerScorer`, including must-catch / must-pass scores driven by `Eval\ExpectedAnswerTag`.
+- `--dataset=braintrust:<name>` loads an eval dataset from the configured Braintrust project at run time, and `braintrust_attachment` references in any dataset row are downloaded and replaced with SDK files (`Eval\BraintrustAttachments`).
 - `Score::$blocking`: a measured blocking score below 1.0 fails the eval command.
 - The eval command prints each score's mean and a confusion matrix for scores that record `confusion` metadata.
 

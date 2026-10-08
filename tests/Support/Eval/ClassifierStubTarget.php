@@ -52,7 +52,10 @@ class ClassifierStubTarget implements ClassifierEvalTarget
             state: $row['state'],
             questions: $questions,
             expected: ExpectedAnswer::fromDataset($row['expected'] ?? []),
-            attachments: array_map(File::fromArray(...), $row['attachments'] ?? []),
+            attachments: array_map(
+                fn (array|File $attachment): File => $attachment instanceof File ? $attachment : File::fromArray($attachment),
+                $row['attachments'] ?? [],
+            ),
         );
     }
 }
