@@ -9,12 +9,14 @@ final readonly class Score
     /**
      * @param  array<string, mixed>  $metadata
      * @param  bool  $skipped  Nothing was measured — see {@see self::skipped()}
+     * @param  bool  $blocking  A measured score below 1.0 fails the whole run (e.g. a missed must-catch row)
      */
     public function __construct(
         public string $name,
         public float $score,
         public array $metadata = [],
         public bool $skipped = false,
+        public bool $blocking = false,
     ) {}
 
     /**

@@ -12,10 +12,10 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Shared HTTP client, project-id resolution, and error handling for classes
- * that talk to the Braintrust REST API directly (not through the neutral
- * TraceExporter pipeline) — currently BraintrustApi (eval scaffolding) and
- * BraintrustFeedbackClient (user feedback).
+ * Shared HTTP client, project and org id resolution, and error handling for
+ * classes that talk to the Braintrust REST API directly (not through the
+ * neutral TraceExporter pipeline) — currently BraintrustApi (eval scaffolding)
+ * and BraintrustFeedbackClient (user feedback).
  */
 trait InteractsWithBraintrustApi
 {
@@ -39,14 +39,26 @@ trait InteractsWithBraintrustApi
 
     protected function projectId(): string
     {
+        return $this->project()['id'];
+    }
+
+    protected function orgId(): string
+    {
+        return $this->project()['org_id'];
+    }
+
+    /**
+     * @return array{id: string, org_id: string}
+     */
+    private function project(): array
+    {
         $project = config('ai-companion.braintrust.project') ?? config('app.name');
 
-        return Cache::rememberForever(
-            "ai-companion:braintrust:project-id:{$project}",
-            fn (): string => (string) $this->request(fn (): Response => $this->client()
-                ->post('/v1/project', ['name' => $project]))
-                ->json('id'),
-        );
+        return Cache::rememberForever("ai-companion:braintrust:project:{$project}", function () use ($project): array {
+            $response = $this->request(fn (): Response => $this->client()->post('/v1/project', ['name' => $project]));
+
+            return ['id' => (string) $response->json('id'), 'org_id' => (string) $response->json('org_id')];
+        });
     }
 
     protected function client(): PendingRequest

@@ -21,9 +21,9 @@ use Laravel\Ai\Responses\TextResponse;
 use Throwable;
 
 /**
- * Runs a single dataset row through the real agent and scores it. Stateless
- * and holds no reference to the calling Command, so it can be invoked inside
- * a forked process by a ConcurrencyRunner.
+ * Runs a single dataset row through the real agent and scores it. Holds no
+ * reference to the calling Command, so it can be invoked inside a forked
+ * process by a ConcurrencyRunner.
  */
 final readonly class RowEvaluator
 {
@@ -34,34 +34,36 @@ final readonly class RowEvaluator
      */
     private const int TRANSCRIPT_RESULT_LIMIT = 500;
 
+    public function __construct(
+        private EvalTarget $target,
+        private Evaluator $evaluator,
+        private EvalHarness $harness,
+        private ?string $provider,
+        private ?string $model,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $row
      */
-    public function evaluate(
-        array $row,
-        EvalTarget $target,
-        Evaluator $evaluator,
-        EvalHarness $harness,
-        ?string $provider,
-        ?string $model,
-    ): RowEvaluationResult {
-        $input = $target->promptInput($row);
+    public function evaluate(array $row): RowEvaluationResult
+    {
+        $input = $this->target->promptInput($row);
 
         // Bootstrap a throwaway world, run the real agent, score it — then roll
         // everything back so the eval leaves no trace in the database.
         DB::beginTransaction();
 
         try {
-            $environment = $harness->boot($row);
+            $environment = $this->harness->boot($row);
 
-            $agent = $target->agent($environment, $row);
+            $agent = $this->target->agent($environment, $row);
 
-            $attachments = $target instanceof HasPromptAttachments
-                ? $target->promptAttachments($row)
+            $attachments = $this->target instanceof HasPromptAttachments
+                ? $this->target->promptAttachments($row)
                 : [];
 
             $startedAt = microtime(true);
-            $response = $agent->prompt($input, $attachments, $provider, $model);
+            $response = $agent->prompt($input, $attachments, $this->provider, $this->model);
             $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
 
             $meta = $response->meta;
@@ -91,8 +93,8 @@ final readonly class RowEvaluator
                 ->values()
                 ->all();
 
-            $subject = new EvalSubject($output, $harness->context($environment), [
-                ...$target->subjectInput($row),
+            $subject = new EvalSubject($output, $this->harness->context($environment), [
+                ...$this->target->subjectInput($row),
                 'tool_calls' => $toolCalls,
                 'tool_call_details' => $response->toolCalls
                     ->map(fn (ToolCall $call): array => ['name' => $call->name, 'arguments' => $call->arguments])
@@ -103,22 +105,21 @@ final readonly class RowEvaluator
                 'tool_results' => $this->toolResults($response),
                 'text' => $response->text,
             ]);
-            $scores = $evaluator->evaluate($subject);
+            $scores = $this->evaluator->evaluate($subject);
 
             $promptName = $loggable['prompt_name'] ?? null;
-            $tags = $row['tags'] ?? null;
 
             return new RowEvaluationResult(
                 event: new ExperimentEventData(
                     input: ['input' => $input],
                     output: $output,
                     scores: $scores,
-                    metadata: new EvalRunMetadata(
+                    metadata: EvalRunMetadata::forRow(
+                        $row,
                         promptName: is_string($promptName) ? $promptName : null,
                         promptVersion: $this->scalarOrNull($loggable['prompt_version'] ?? null),
                         model: $meta->model,
                         provider: $meta->provider,
-                        tags: is_array($tags) ? array_values(array_filter($tags, 'is_string')) : [],
                     ),
                     metrics: new EvalRunMetrics(
                         latencyMs: $latencyMs,
