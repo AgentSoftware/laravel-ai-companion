@@ -6,7 +6,6 @@ namespace AgentSoftware\LaravelAiCompanion\Eval\Judges;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Attributes\Provider;
-use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
@@ -16,15 +15,18 @@ use Laravel\Ai\Promptable;
 /**
  * Generic LLM-as-judge: rates a candidate output against a reference and a
  * rubric on a 0–scale integer scale. Defaults to the cheapest Anthropic model —
- * the call is simple and runs once per dataset row — and is deterministic
- * (temperature 0). Override the provider/model via config or the prompt call.
+ * the call is simple and runs once per dataset row. Override the provider/model
+ * via config or the prompt call.
+ *
+ * No temperature is set: current Anthropic models (Haiku 5.5, Sonnet 5.5, Opus
+ * 4.7+) reject a non-default `temperature` with a 400, so pinning it to 0 would
+ * break the judge on any of them.
  *
  * The schema is deliberately flat (two scalar fields, no nested objects) to stay
  * clear of provider quirks around nested `additionalProperties`.
  */
 #[Provider([Lab::Anthropic])]
 #[UseCheapestModel]
-#[Temperature(0.0)]
 final class JudgeAgent implements Agent, HasStructuredOutput
 {
     use Promptable;
