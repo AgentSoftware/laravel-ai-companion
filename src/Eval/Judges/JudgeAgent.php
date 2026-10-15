@@ -17,12 +17,17 @@ use Laravel\Ai\Promptable;
  * Generic LLM-as-judge: rates a candidate output against a reference and a
  * rubric on a 0–scale integer scale. Defaults to the cheapest Anthropic model —
  * the call is simple and runs once per dataset row — and is deterministic
- * (temperature 0). Override the provider/model via config or the prompt call.
+ * (temperature 0) on models that accept it; laravel/ai leaves it off for those
+ * that don't. Override the provider/model via config or the prompt call.
+ *
+ * The provider is a single Lab, not a list: laravel/ai drops the model argument
+ * when the provider is a list, so `ai-companion.eval.judge.model` would be
+ * ignored unless a judge provider was configured too.
  *
  * The schema is deliberately flat (two scalar fields, no nested objects) to stay
  * clear of provider quirks around nested `additionalProperties`.
  */
-#[Provider([Lab::Anthropic])]
+#[Provider(Lab::Anthropic)]
 #[UseCheapestModel]
 #[Temperature(0.0)]
 final class JudgeAgent implements Agent, HasStructuredOutput
