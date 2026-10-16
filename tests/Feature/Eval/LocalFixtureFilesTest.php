@@ -18,15 +18,15 @@ use Laravel\Ai\Files\LocalImage;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
-    File::ensureDirectoryExists(base_path('fixtures'));
-    File::put(base_path('fixtures/epc.pdf'), '%PDF-1.4 epc');
-    File::put(base_path('fixtures/meter.png'), base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg=='));
+    File::ensureDirectoryExists(base_path('local-file-fixtures'));
+    File::put(base_path('local-file-fixtures/epc.pdf'), '%PDF-1.4 epc');
+    File::put(base_path('local-file-fixtures/meter.png'), base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg=='));
 });
 
 afterEach(function (): void {
-    File::deleteDirectory(base_path('fixtures'));
+    File::deleteDirectory(base_path('local-file-fixtures'));
     File::delete(dirname(base_path()).'/outside-fixture.txt');
-    File::delete(base_path('eval-dataset.json'));
+    File::delete(base_path('local-file-eval-dataset.json'));
     File::delete(sys_get_temp_dir().'/stub-document.ndjson');
 });
 
@@ -38,15 +38,15 @@ function localFileReference(string $path, array $extra = []): array
 it('replaces nested local file references with SDK files pointing at the fixture in place', function (): void {
     $row = new LocalFixtureFiles()->resolve([
         'brief' => 'read it',
-        'document' => localFileReference('fixtures/epc.pdf'),
-        'photos' => [localFileReference('fixtures/meter.png')],
+        'document' => localFileReference('local-file-fixtures/epc.pdf'),
+        'photos' => [localFileReference('local-file-fixtures/meter.png')],
         'meta' => ['n' => 1],
     ]);
 
     expect($row['brief'])->toBe('read it')
         ->and($row['meta'])->toBe(['n' => 1])
         ->and($row['document'])->toBeInstanceOf(LocalDocument::class)
-        ->and($row['document']->path)->toBe(realpath(base_path('fixtures/epc.pdf')))
+        ->and($row['document']->path)->toBe(realpath(base_path('local-file-fixtures/epc.pdf')))
         ->and($row['document']->content())->toBe('%PDF-1.4 epc')
         ->and($row['document']->name())->toBe('epc.pdf')
         ->and($row['document']->mimeType())->toBe('application/pdf')
@@ -56,7 +56,7 @@ it('replaces nested local file references with SDK files pointing at the fixture
 
 it('lets a reference override the file name and content type', function (): void {
     $row = new LocalFixtureFiles()->resolve([
-        'document' => localFileReference('fixtures/epc.pdf', ['filename' => 'certificate.pdf', 'content_type' => 'application/x-custom']),
+        'document' => localFileReference('local-file-fixtures/epc.pdf', ['filename' => 'certificate.pdf', 'content_type' => 'application/x-custom']),
     ]);
 
     expect($row['document']->name())->toBe('certificate.pdf')
@@ -64,8 +64,8 @@ it('lets a reference override the file name and content type', function (): void
 });
 
 it('rejects a fixture file that does not exist', function (): void {
-    new LocalFixtureFiles()->resolve(['document' => localFileReference('fixtures/missing.pdf')]);
-})->throws(RuntimeException::class, 'Eval fixture file [fixtures/missing.pdf] does not exist.');
+    new LocalFixtureFiles()->resolve(['document' => localFileReference('local-file-fixtures/missing.pdf')]);
+})->throws(RuntimeException::class, 'Eval fixture file [local-file-fixtures/missing.pdf] does not exist.');
 
 it('rejects a fixture path that leaves the base path', function (): void {
     File::put(dirname(base_path()).'/outside-fixture.txt', 'secret');
@@ -80,11 +80,11 @@ it('sends a local dataset row\'s fixture to the agent as a prompt attachment', f
     $this->app->bind(ConcurrencyRunner::class, RecordingConcurrencyRunner::class);
 
     TextStubAgent::fake(['rated C']);
-    File::put(base_path('eval-dataset.json'), json_encode([
-        ['brief' => 'read the certificate', 'document' => localFileReference('fixtures/epc.pdf')],
+    File::put(base_path('local-file-eval-dataset.json'), json_encode([
+        ['brief' => 'read the certificate', 'document' => localFileReference('local-file-fixtures/epc.pdf')],
     ]));
 
-    $this->artisan('stub:eval', ['target' => 'stub-document', '--out' => sys_get_temp_dir().'/stub-document.ndjson'])
+    $this->artisan('stub:eval', ['target' => 'stub-document', '--dataset' => 'local-file-eval-dataset.json', '--out' => sys_get_temp_dir().'/stub-document.ndjson'])
         ->assertSuccessful();
 
     TextStubAgent::assertPrompted(function ($prompt): bool {
@@ -110,7 +110,7 @@ it('sends a Braintrust dataset row\'s fixture to the agent as a prompt attachmen
         'api.braintrust.dev/v1/project' => Http::response(['id' => 'proj-1', 'org_id' => 'org-1']),
         'api.braintrust.dev/v1/dataset?*' => Http::response(['objects' => [['id' => 'ds-1']]]),
         'api.braintrust.dev/v1/dataset/ds-1/fetch' => Http::response(['events' => [
-            ['id' => 'row-1', 'input' => ['brief' => 'read it', 'document' => localFileReference('fixtures/epc.pdf')]],
+            ['id' => 'row-1', 'input' => ['brief' => 'read it', 'document' => localFileReference('local-file-fixtures/epc.pdf')]],
         ]]),
         'api.braintrust.dev/v1/experiment' => Http::response(['id' => 'exp-1']),
         'api.braintrust.dev/v1/experiment/exp-1/insert' => Http::response(['row_ids' => ['1']]),

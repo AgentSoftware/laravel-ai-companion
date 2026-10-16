@@ -13,17 +13,17 @@ beforeEach(function (): void {
     config()->set('ai-companion.braintrust.project', 'my-project');
 
     Http::preventStrayRequests();
-    File::ensureDirectoryExists(base_path('fixtures'));
-    File::put(base_path('fixtures/epc.pdf'), '%PDF-1.4 epc');
-    File::put(base_path('fixtures/epc-two.pdf'), '%PDF-1.4 two');
-    File::put(base_path('fixtures/epc-dataset.json'), json_encode([
-        ['id' => 'epc-1', 'brief' => 'read it', 'document' => ['type' => 'local_file', 'path' => 'fixtures/epc.pdf'], 'expected' => ['rating' => 'C'], 'tags' => ['epc']],
-        ['id' => 'epc-2', 'brief' => 'read this too', 'document' => ['type' => 'local_file', 'path' => 'fixtures/epc-two.pdf']],
+    File::ensureDirectoryExists(base_path('publish-fixtures'));
+    File::put(base_path('publish-fixtures/epc.pdf'), '%PDF-1.4 epc');
+    File::put(base_path('publish-fixtures/epc-two.pdf'), '%PDF-1.4 two');
+    File::put(base_path('publish-fixtures/epc-dataset.json'), json_encode([
+        ['id' => 'epc-1', 'brief' => 'read it', 'document' => ['type' => 'local_file', 'path' => 'publish-fixtures/epc.pdf'], 'expected' => ['rating' => 'C'], 'tags' => ['epc']],
+        ['id' => 'epc-2', 'brief' => 'read this too', 'document' => ['type' => 'local_file', 'path' => 'publish-fixtures/epc-two.pdf']],
     ]));
 });
 
 afterEach(function (): void {
-    File::deleteDirectory(base_path('fixtures'));
+    File::deleteDirectory(base_path('publish-fixtures'));
 });
 
 function fakeBraintrustDatasetPublishing(array $existingRowIds = [], int $putStatus = 200, string $signedHost = 'bucket.test'): void
@@ -45,7 +45,7 @@ function fakeBraintrustDatasetPublishing(array $existingRowIds = [], int $putSta
 it('uploads each fixture and inserts the rows with their attachment references', function (): void {
     fakeBraintrustDatasetPublishing();
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])->assertSuccessful();
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://api.braintrust.dev/v1/dataset'
@@ -88,16 +88,17 @@ it('uploads each fixture and inserts the rows with their attachment references',
 });
 
 it('uploads a fixture reference exactly like a local_file reference', function (): void {
-    File::ensureDirectoryExists(base_path('resources/ai/fixtures'));
-    File::put(base_path('resources/ai/fixtures/epc.pdf'), '%PDF-1.4 epc');
-    File::put(base_path('fixtures/epc-dataset.json'), json_encode([[
+    config()->set('ai-companion.eval.fixtures_path', 'publish-fixtures/library');
+    File::ensureDirectoryExists(base_path('publish-fixtures/library'));
+    File::put(base_path('publish-fixtures/library/epc.pdf'), '%PDF-1.4 epc');
+    File::put(base_path('publish-fixtures/epc-dataset.json'), json_encode([[
         'id' => 'epc-1',
         'by_fixture' => ['type' => 'fixture', 'name' => 'epc.pdf'],
-        'by_path' => ['type' => 'local_file', 'path' => 'resources/ai/fixtures/epc.pdf'],
+        'by_path' => ['type' => 'local_file', 'path' => 'publish-fixtures/library/epc.pdf'],
     ]]));
     fakeBraintrustDatasetPublishing();
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])->assertSuccessful();
 
     $uploads = Http::recorded(fn (Request $request): bool => $request->url() === 'https://api.braintrust.dev/attachment');
     $keys = $uploads->map(fn (array $pair): string => $pair[0]['key'])->values();
@@ -109,26 +110,23 @@ it('uploads a fixture reference exactly like a local_file reference', function (
             'by_path' => ['type' => 'braintrust_attachment', 'filename' => 'epc.pdf', 'content_type' => 'application/pdf', 'key' => $keys[1]],
         ]);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT' && $request->body() === '%PDF-1.4 epc');
-
-    File::deleteDirectory(base_path('resources/ai'));
 });
 
 it('counts fixture references in a dry run', function (): void {
-    File::ensureDirectoryExists(base_path('resources/ai/fixtures'));
-    File::put(base_path('resources/ai/fixtures/epc.pdf'), '%PDF-1.4 epc');
-    File::put(base_path('fixtures/epc-dataset.json'), json_encode([['id' => 'epc-1', 'document' => ['type' => 'fixture', 'name' => 'epc.pdf']]]));
+    config()->set('ai-companion.eval.fixtures_path', 'publish-fixtures/library');
+    File::ensureDirectoryExists(base_path('publish-fixtures/library'));
+    File::put(base_path('publish-fixtures/library/epc.pdf'), '%PDF-1.4 epc');
+    File::put(base_path('publish-fixtures/epc-dataset.json'), json_encode([['id' => 'epc-1', 'document' => ['type' => 'fixture', 'name' => 'epc.pdf']]]));
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--dry-run' => true])
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json', '--dry-run' => true])
         ->expectsOutputToContain('would publish 1 row(s) and upload 1 file(s)')
         ->assertSuccessful();
-
-    File::deleteDirectory(base_path('resources/ai'));
 });
 
 it('publishes to the named dataset', function (): void {
     fakeBraintrustDatasetPublishing();
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--name' => 'epc-readings'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json', '--name' => 'epc-readings'])->assertSuccessful();
 
     Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.braintrust.dev/v1/dataset' && $request['name'] === 'epc-readings');
 });
@@ -136,7 +134,7 @@ it('publishes to the named dataset', function (): void {
 it('skips rows the dataset already has, so a re-run uploads nothing twice', function (): void {
     fakeBraintrustDatasetPublishing(['epc-1']);
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])->assertSuccessful();
 
     expect(Http::recorded(fn (Request $request): bool => $request->url() === 'https://api.braintrust.dev/attachment'))->toHaveCount(1);
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/insert')
@@ -147,7 +145,7 @@ it('skips rows the dataset already has, so a re-run uploads nothing twice', func
 it('does nothing when every row is already published', function (): void {
     fakeBraintrustDatasetPublishing(['epc-1', 'epc-2']);
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])->assertSuccessful();
 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/attachment') || str_ends_with($request->url(), '/insert'));
 });
@@ -155,17 +153,17 @@ it('does nothing when every row is already published', function (): void {
 it('replaces rows that already exist when asked to', function (): void {
     fakeBraintrustDatasetPublishing(['epc-1', 'epc-2']);
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--replace' => true])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json', '--replace' => true])->assertSuccessful();
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/insert') && count($request['events']) === 2);
 });
 
 it('gives a row without an id the same id on every run', function (): void {
-    File::put(base_path('fixtures/epc-dataset.json'), json_encode([['brief' => 'no id', 'document' => ['type' => 'local_file', 'path' => 'fixtures/epc.pdf']]]));
+    File::put(base_path('publish-fixtures/epc-dataset.json'), json_encode([['brief' => 'no id', 'document' => ['type' => 'local_file', 'path' => 'publish-fixtures/epc.pdf']]]));
     fakeBraintrustDatasetPublishing();
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])->assertSuccessful();
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])->assertSuccessful();
 
     $ids = Http::recorded(fn (Request $request): bool => str_ends_with($request->url(), '/insert'))
         ->map(fn (array $pair): string => $pair[0]['events'][0]['id'])
@@ -177,7 +175,7 @@ it('gives a row without an id the same id on every run', function (): void {
 it('inserts nothing when an upload to the object store fails, and reports the failure to Braintrust', function (): void {
     fakeBraintrustDatasetPublishing(putStatus: 403);
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])
         ->expectsOutputToContain('Publish aborted — Braintrust attachment [epc.pdf] failed to upload to the object store.')
         ->assertFailed();
 
@@ -190,7 +188,7 @@ it('inserts nothing when an upload to the object store fails, and reports the fa
 it('refuses to upload to Azure-hosted Braintrust', function (): void {
     fakeBraintrustDatasetPublishing(signedHost: 'account.blob.core.windows.net');
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])
         ->expectsOutputToContain('uploads to Azure-hosted Braintrust are not supported')
         ->assertFailed();
 
@@ -200,7 +198,7 @@ it('refuses to upload to Azure-hosted Braintrust', function (): void {
 it('checks the fixtures and counts the rows on a dry run without calling Braintrust', function (): void {
     Http::fake();
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--dry-run' => true])
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json', '--dry-run' => true])
         ->expectsOutputToContain('Dry run: would publish 2 row(s)')
         ->assertSuccessful();
 
@@ -210,29 +208,29 @@ it('checks the fixtures and counts the rows on a dry run without calling Braintr
 it('reports how many fixture files a dry run would upload', function (): void {
     Http::fake();
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--dry-run' => true])
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json', '--dry-run' => true])
         ->expectsOutputToContain('upload 2 file(s)')
         ->assertSuccessful();
 });
 
 it('fails a dry run when a fixture file is missing', function (): void {
-    File::delete(base_path('fixtures/epc-two.pdf'));
+    File::delete(base_path('publish-fixtures/epc-two.pdf'));
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--dry-run' => true])
-        ->expectsOutputToContain('Eval fixture file [fixtures/epc-two.pdf] does not exist.')
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json', '--dry-run' => true])
+        ->expectsOutputToContain('Eval fixture file [publish-fixtures/epc-two.pdf] does not exist.')
         ->assertFailed();
 });
 
 it('fails when the dataset file does not exist', function (): void {
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/nope.json'])
-        ->expectsOutputToContain('Dataset file [fixtures/nope.json] does not exist.')
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/nope.json'])
+        ->expectsOutputToContain('Dataset file [publish-fixtures/nope.json] does not exist.')
         ->assertFailed();
 });
 
 it('fails when the dataset file has no rows', function (): void {
-    File::put(base_path('fixtures/epc-dataset.json'), '[]');
+    File::put(base_path('publish-fixtures/epc-dataset.json'), '[]');
 
-    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])
+    $this->artisan('ai:publish-dataset', ['path' => 'publish-fixtures/epc-dataset.json'])
         ->expectsOutputToContain('Dataset file has no rows.')
         ->assertFailed();
 });
