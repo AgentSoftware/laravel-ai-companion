@@ -93,11 +93,15 @@ class PublishDatasetCommand extends Command
     {
         $files = 0;
 
-        $rows->each(fn (array $row): array => $fixtures->replace($row, function () use (&$files): null {
+        $count = function () use (&$files): null {
             $files++;
 
             return null;
-        }));
+        };
+
+        $rows->each(function (array $row) use ($fixtures, $count): void {
+            $fixtures->replace($row, $count);
+        });
 
         outro(sprintf('Dry run: would publish %d row(s) and upload %d file(s) to Braintrust dataset "%s".', $rows->count(), $files, $name));
 

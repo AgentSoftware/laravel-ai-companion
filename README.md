@@ -163,6 +163,16 @@ AI_COMPANION_TRACING_EXPORTER=my-backend
 
 Run an AI agent over a dataset, score each output, and push a [Braintrust](https://www.braintrust.dev) experiment — or write scored NDJSON when no Braintrust key is set. The package owns the run loop, scoring, reporting, and export; your app provides the agents, datasets, and a thin harness.
 
+No `ai:eval` command ships with the package: `RunEvalCommand` is abstract, so your app adds a one-line subclass that names the command (the `ai:eval` used below is that subclass; see [Running](#running) for the full signature):
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Commands\RunEvalCommand;
+use Illuminate\Console\Attributes\Signature;
+
+#[Signature('ai:eval {target?} {--dataset=} {--out=} {--provider=} {--model=} {--tag=} {--limit=} {--trials=1} {--concurrency=5} {--timeout=}')]
+final class EvalCommand extends RunEvalCommand {}
+```
+
 ### Configure
 
 Point the `eval` block in `config/ai-companion.php` at your app's classes:
@@ -178,6 +188,24 @@ Point the `eval` block in `config/ai-companion.php` at your app's classes:
 ```
 
 ### The harness
+
+An agent target needs a harness: with no `eval.harness` set, `ai:eval` stops with "No eval harness configured". Classifier targets do not need one. The smallest harness boots nothing:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
+
+final class EmptyEnvironment implements EvalEnvironment {}
+
+final class AppHarness implements EvalHarness
+{
+    public function boot(array $row): EvalEnvironment { return new EmptyEnvironment; }
+    public function context(EvalEnvironment $environment): ?object { return null; }
+    public function experimentMetadata(): array { return []; }
+}
+```
+
+Set `'harness' => App\Eval\AppHarness::class` under `eval` in `config/ai-companion.php`.
 
 The package never touches your models. Your harness boots a throwaway world for each dataset row and returns an `EvalEnvironment` (a marker your environment class implements). Each row runs inside a transaction that is rolled back, so an eval leaves no trace.
 
@@ -361,7 +389,7 @@ php artisan ai:publish-dataset tests/Fixtures/eval/epc.json --name=epc-reports
 php artisan ai:eval epc-report --dataset=braintrust:epc-reports
 ```
 
-`ai:publish-dataset {path} {--name=} {--replace} {--dry-run}` finds or creates the dataset in the configured project (`--name` defaults to the file name), skips rows whose `id` is already in it, uploads each `local_file` fixture of the remaining rows as a Braintrust attachment, and inserts the rows with a `braintrust_attachment` reference in place of each `local_file`. Give every row an `id`: a row without one is given a hash of its content, so editing it publishes a new row. `--replace` re-inserts rows that already exist (same id) instead of skipping them. `--dry-run` checks that every fixture exists and counts rows and files without calling Braintrust.
+`ai:publish-dataset {path} {--name=} {--replace} {--dry-run}` finds or creates the dataset in the configured project (`--name` defaults to the file name), skips rows whose `id` is already in it, uploads each `local_file` fixture of the remaining rows as a Braintrust attachment, and inserts the rows with a `braintrust_attachment` reference in place of each `local_file`. Give every row an `id`: a row without one is given a hash of its content, so editing it publishes a new row. `--replace` re-inserts rows that already exist (same id) instead of skipping them. Every upload creates a new attachment, so `--replace` uploads each file again under a new key and the previous attachment is orphaned: Braintrust has no attachment delete endpoint. `--dry-run` checks that every fixture exists and counts rows and files without calling Braintrust.
 
 The upload is Braintrust's own attachment protocol: `POST /attachment` for a presigned URL, a `PUT` of the bytes to it, then `POST /attachment/status`. Azure-hosted Braintrust needs extra blob headers and is refused with an error.
 

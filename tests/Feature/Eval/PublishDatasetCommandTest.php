@@ -169,6 +169,14 @@ it('checks the fixtures and counts the rows on a dry run without calling Braintr
     Http::assertNothingSent();
 });
 
+it('reports how many fixture files a dry run would upload', function (): void {
+    Http::fake();
+
+    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--dry-run' => true])
+        ->expectsOutputToContain('upload 2 file(s)')
+        ->assertSuccessful();
+});
+
 it('fails a dry run when a fixture file is missing', function (): void {
     File::delete(base_path('fixtures/epc-two.pdf'));
 
