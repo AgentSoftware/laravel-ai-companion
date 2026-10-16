@@ -180,7 +180,9 @@ it('passes a row\'s attachments to the classification', function (): void {
 });
 
 it('fails the run when a classification fails, without stopping the other rows', function (): void {
-    Classification::fake([['gas' => new BooleanAnswer(0.9)]]);
+    Classification::fake(fn (ClassificationPrompt $prompt): array => is_array($prompt->state)
+        ? throw new RuntimeException('Provider unavailable.')
+        : ['gas' => new BooleanAnswer(0.9)]);
     writeClassifierDataset([
         ['decision' => 'hazard', 'state' => 'Gas smell', 'expected' => ['gas' => true]],
         ['decision' => 'hazard', 'state' => ['report' => 'Photo of the meter'], 'attachments' => [['type' => 'remote-image', 'url' => 'https://example.test/meter.jpg']]],
@@ -191,7 +193,7 @@ it('fails the run when a classification fails, without stopping the other rows',
 
     expect($status)->toBe(Command::FAILURE)
         ->and($output)->toContain('1 run(s) failed')
-        ->and($output)->toContain('{"report":"Photo of the meter"} — Provider [typesafe] does not support classification attachments.')
+        ->and($output)->toContain('{"report":"Photo of the meter"} — Provider unavailable.')
         ->and($output)->toContain('1 classification(s) failed to run, so their gates were not measured.')
         ->and(readClassifierNdjson($this->out))->toHaveCount(1);
 });
