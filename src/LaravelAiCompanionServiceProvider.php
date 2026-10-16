@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentSoftware\LaravelAiCompanion;
 
+use AgentSoftware\LaravelAiCompanion\Eval\Commands\PublishDatasetCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Commands\PublishEvalCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Commands\ScaffoldEvalCommand;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ConcurrencyRunner;
@@ -32,7 +33,7 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
-            ->hasCommands(ScaffoldEvalCommand::class, PublishEvalCommand::class)
+            ->hasCommands(ScaffoldEvalCommand::class, PublishEvalCommand::class, PublishDatasetCommand::class)
             ->discoversMigrations();
     }
 

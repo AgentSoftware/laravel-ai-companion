@@ -1,5 +1,15 @@
 # Upgrade Guide
 
+## Unreleased
+
+There are no new migrations and no breaking changes.
+
+### Added
+
+- `local_file` references in a dataset row (`{"type": "local_file", "path": "tests/Fixtures/eval/epc.pdf"}`, path relative to the app base path) are replaced with a `LocalImage` or `LocalDocument` before the rows run, for local JSON and Braintrust datasets alike (`Eval\LocalFixtureFiles`). An agent target sends them with `HasPromptAttachments`.
+- `ai:publish-dataset {path} {--name=} {--replace} {--dry-run}` publishes a local dataset to a Braintrust dataset, uploading each `local_file` fixture as a Braintrust attachment.
+- `BraintrustApi::findOrCreateDataset()`, `datasetRowIds()`, `insertDatasetRows()` and `uploadAttachment()`.
+
 ## Upgrading To 5.2 From 5.1
 
 Companion 5.2 requires `laravel/ai` 1.2 or later, for its `Classification` API. There are no new migrations, and existing `EvalTarget` implementations are unchanged: `key()`, `label()`, `defaultDataset()` and `scorers()` moved to a new parent interface, `Eval\Contracts\DatasetTarget`, which `EvalTarget` extends.

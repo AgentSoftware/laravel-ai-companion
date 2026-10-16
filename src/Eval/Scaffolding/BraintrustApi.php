@@ -7,7 +7,9 @@ namespace AgentSoftware\LaravelAiCompanion\Eval\Scaffolding;
 use AgentSoftware\LaravelAiCompanion\Braintrust\InteractsWithBraintrustApi;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 /**
  * The single Braintrust-aware client for the eval tooling: scaffolding reads
@@ -61,22 +63,7 @@ class BraintrustApi
             ->json('objects', []))
             ->value('id') ?? throw new RuntimeException("Braintrust dataset [{$name}] not found in the configured project.");
 
-        $events = [];
-        $cursor = null;
-
-        // Pages run newest first over the whole version history, so a later page
-        // can repeat a row at an older version: the first copy of an id wins.
-        do {
-            $page = $this->request(fn (): Response => $this->client()
-                ->post("/v1/dataset/{$datasetId}/fetch", array_filter(['limit' => self::DATASET_PAGE_SIZE, 'cursor' => $cursor])));
-            $batch = (array) $page->json('events', []);
-
-            foreach ($batch as $event) {
-                $events[$event['id']] ??= $event;
-            }
-
-            $cursor = $page->json('cursor');
-        } while ($batch !== [] && is_string($cursor));
+        $events = $this->datasetEventsById($datasetId);
 
         return array_values(array_map(function (array $event): array {
             $input = $event['input'] ?? null;
@@ -88,6 +75,84 @@ class BraintrustApi
                     'tags' => $event['tags'] ?? null,
                 ], fn (mixed $value): bool => $value !== null);
         }, $events));
+    }
+
+    /**
+     * Create the dataset in the configured project, or find it when the name is
+     * taken (the endpoint returns an existing dataset unmodified); returns its id.
+     */
+    public function findOrCreateDataset(string $name): string
+    {
+        return (string) $this->request(fn (): Response => $this->client()
+            ->post('/v1/dataset', ['project_id' => $this->projectId(), 'name' => $name]))
+            ->json('id');
+    }
+
+    /** @return array<int, string> */
+    public function datasetRowIds(string $datasetId): array
+    {
+        return array_map(strval(...), array_keys($this->datasetEventsById($datasetId)));
+    }
+
+    /**
+     * Insert events into a dataset. An event whose `id` already exists replaces that row.
+     *
+     * @param  array<int, array{id: string, input: mixed, expected?: mixed, tags?: array<int, string>}>  $events
+     */
+    public function insertDatasetRows(string $datasetId, array $events): void
+    {
+        $this->request(fn (): Response => $this->client()
+            ->post("/v1/dataset/{$datasetId}/insert", ['events' => $events]));
+    }
+
+    /**
+     * Upload bytes as a Braintrust attachment and return the reference to put
+     * in a dataset row: ask the API for a presigned URL, PUT the bytes to the
+     * object store with the headers it returns, then report the outcome to the
+     * API. Azure-hosted Braintrust needs extra blob headers and is not supported.
+     *
+     * @return array{type: string, filename: string, content_type: string, key: string}
+     */
+    public function uploadAttachment(string $filename, string $contentType, string $contents): array
+    {
+        $key = (string) Str::uuid();
+
+        $upload = $this->request(fn (): Response => $this->client()->post('/attachment', [
+            'key' => $key,
+            'filename' => $filename,
+            'content_type' => $contentType,
+            'org_id' => $this->orgId(),
+        ]));
+
+        $signedUrl = (string) $upload->json('signedUrl');
+
+        if (str_contains((string) parse_url($signedUrl, PHP_URL_HOST), 'blob.core.windows.net')) {
+            throw new RuntimeException('Braintrust attachment uploads to Azure-hosted Braintrust are not supported.');
+        }
+
+        $headers = collect((array) $upload->json('headers'));
+        $contentTypeHeader = $headers->first(fn (mixed $value, string $name): bool => strtolower($name) === 'content-type', $contentType);
+        $otherHeaders = $headers->reject(fn (mixed $value, string $name): bool => strtolower($name) === 'content-type')->all();
+
+        $status = ['upload_status' => 'done'];
+
+        try {
+            Http::timeout(60)->withBody($contents, (string) $contentTypeHeader)->replaceHeaders($otherHeaders)->put($signedUrl)->throw();
+        } catch (Throwable $exception) {
+            $status = ['upload_status' => 'error', 'error_message' => $exception->getMessage()];
+        }
+
+        $this->request(fn (): Response => $this->client()->post('/attachment/status', [
+            'key' => $key,
+            'org_id' => $this->orgId(),
+            'status' => $status,
+        ]));
+
+        if ($status['upload_status'] === 'error') {
+            throw new RuntimeException("Braintrust attachment [{$filename}] failed to upload to the object store.");
+        }
+
+        return ['type' => 'braintrust_attachment', 'filename' => $filename, 'content_type' => $contentType, 'key' => $key];
     }
 
     /**
@@ -108,6 +173,33 @@ class BraintrustApi
         }
 
         return Http::timeout(60)->get((string) $metadata->json('downloadUrl'))->throw()->body();
+    }
+
+    /**
+     * Every event of a dataset, keyed by row id.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function datasetEventsById(string $datasetId): array
+    {
+        $events = [];
+        $cursor = null;
+
+        // Pages run newest first over the whole version history, so a later page
+        // can repeat a row at an older version: the first copy of an id wins.
+        do {
+            $page = $this->request(fn (): Response => $this->client()
+                ->post("/v1/dataset/{$datasetId}/fetch", array_filter(['limit' => self::DATASET_PAGE_SIZE, 'cursor' => $cursor])));
+            $batch = (array) $page->json('events', []);
+
+            foreach ($batch as $event) {
+                $events[$event['id']] ??= $event;
+            }
+
+            $cursor = $page->json('cursor');
+        } while ($batch !== [] && is_string($cursor));
+
+        return $events;
     }
 
     /**

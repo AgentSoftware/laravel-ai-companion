@@ -259,6 +259,41 @@ final class SummaryTarget implements EvalTarget, FiltersDatasetRows
 
 The runner applies `includeRow()` right after loading the dataset, so exclusion happens **before** `--tag` and `--limit` (`--limit=5` means five included rows, not five rows of which some were dropped). It prints `Skipped N rows (excluded by target).` when any rows were excluded.
 
+#### Sending a file to the agent
+
+An agent that reads a document or image (an EPC certificate PDF, say) gets it through `HasPromptAttachments`. The runner passes the result as the prompt's attachments; targets that implement only `EvalTarget` send text alone.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
+
+final class EpcReportTarget implements EvalTarget, HasPromptAttachments
+{
+    // …
+
+    public function promptInput(array $row): string { return 'Read this certificate.'; }
+
+    public function promptAttachments(array $row): array
+    {
+        return [$row['document']];   // already a LocalDocument, see below
+    }
+}
+```
+
+A dataset row points at a fixture kept in the repo with a `local_file` reference, anywhere in the row. `path` is relative to the app base path and may not leave it; `filename` and `content_type` are optional (the content type is sniffed from the file).
+
+```json
+[
+  {
+    "id": "epc-band-c",
+    "document": { "type": "local_file", "path": "tests/Fixtures/eval/epc-band-c.pdf" },
+    "expected": { "current_energy_rating": "C" },
+    "tags": ["epc"]
+  }
+]
+```
+
+Before the rows run, every reference is replaced with a `LocalImage` (an `image/*` content type) or a `LocalDocument` pointing at the file in place. Only the path travels to the forked processes, never the bytes. This works the same for a local JSON dataset and for a Braintrust dataset (see below). `includeRow()` on `FiltersDatasetRows` still sees the raw reference.
+
 ### Classifier targets
 
 To evaluate a classification (`Laravel\Ai\Classification`) instead of an agent, implement `ClassifierEvalTarget`. It has the same `key()`, `label()`, `defaultDataset()` and `scorers()`, plus `classification()`, which turns a row into the state, the keyed questions, any attachments, and the answers the row expects. The runner classifies each row with `--provider` / `--model`, so one dataset can be compared across TypeSafe, OpenAI and OpenRouter. Classifier targets need no harness; when one is configured, its `experimentMetadata()` is still recorded. One target can serve many decisions by switching on a row field:
@@ -306,7 +341,7 @@ A row's `expected` is keyed by question: a bare answer, or an object with an `an
 
 #### Datasets in Braintrust
 
-Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `LocalImage` (or `LocalDocument`), so the target passes the field straight to `attachments`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`, into a private temporary directory that is deleted when the run ends.
+Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `LocalImage` (or `LocalDocument`), so the target passes the field straight to `attachments`. The same applies to a Braintrust dataset row in an agent target: return the field from `promptAttachments()`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`, into a private temporary directory that is deleted when the run ends.
 
 ```json
 [
@@ -316,6 +351,19 @@ Rows that must stay out of git (photos, say) can live in a Braintrust dataset in
 ```
 
 The run prints each score's mean and a confusion matrix per question, and exports input (state and questions), output (each answer with its probabilities), expected and scores to Braintrust as `{key}/{dataset}/{provider}/{model}`. Any `blocking` score below 1.0 (a missed must-catch row) fails the command after the results are exported, and so does any classification row that fails to run, since its gates were never measured.
+
+#### Publishing fixtures to Braintrust
+
+To share a dataset that has fixture files (teammates, CI) without committing the files, publish it:
+
+```bash
+php artisan ai:publish-dataset tests/Fixtures/eval/epc.json --name=epc-reports
+php artisan ai:eval epc-report --dataset=braintrust:epc-reports
+```
+
+`ai:publish-dataset {path} {--name=} {--replace} {--dry-run}` finds or creates the dataset in the configured project (`--name` defaults to the file name), skips rows whose `id` is already in it, uploads each `local_file` fixture of the remaining rows as a Braintrust attachment, and inserts the rows with a `braintrust_attachment` reference in place of each `local_file`. Give every row an `id`: a row without one is given a hash of its content, so editing it publishes a new row. `--replace` re-inserts rows that already exist (same id) instead of skipping them. `--dry-run` checks that every fixture exists and counts rows and files without calling Braintrust.
+
+The upload is Braintrust's own attachment protocol: `POST /attachment` for a presigned URL, a `PUT` of the bytes to it, then `POST /attachment/status`. Azure-hosted Braintrust needs extra blob headers and is refused with an error.
 
 ### Scorers
 

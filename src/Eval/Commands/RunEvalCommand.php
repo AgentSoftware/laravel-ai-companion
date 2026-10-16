@@ -15,6 +15,7 @@ use AgentSoftware\LaravelAiCompanion\Eval\Contracts\ExperimentExporter;
 use AgentSoftware\LaravelAiCompanion\Eval\Contracts\FiltersDatasetRows;
 use AgentSoftware\LaravelAiCompanion\Eval\Evaluator;
 use AgentSoftware\LaravelAiCompanion\Eval\ExperimentEventData;
+use AgentSoftware\LaravelAiCompanion\Eval\LocalFixtureFiles;
 use AgentSoftware\LaravelAiCompanion\Eval\RepoInfo;
 use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluationResult;
 use AgentSoftware\LaravelAiCompanion\Eval\RowEvaluator;
@@ -109,7 +110,8 @@ abstract class RunEvalCommand extends Command
         try {
             // Only the rows that will run are resolved, so --tag/--limit skip downloads.
             $attachments = new BraintrustAttachments($braintrust, $attachmentDirectory);
-            $rows = $rows->map(fn (array $row): array => $attachments->resolve($row));
+            $fixtures = new LocalFixtureFiles;
+            $rows = $rows->map(fn (array $row): array => $fixtures->resolve($attachments->resolve($row)));
 
             $trials = max(1, (int) $this->option('trials'));
 
