@@ -11,16 +11,20 @@ use Laravel\Ai\Files\LocalImage;
 use RuntimeException;
 
 /**
- * Finds every `local_file` reference in a dataset row, at any depth. A reference
- * is `{"type": "local_file", "path": "tests/Fixtures/eval/epc.pdf"}` with an
- * optional `filename` and `content_type`; the path is relative to the app base
- * path and may not leave it. Resolving swaps each reference for an SDK file
+ * Finds every `local_file` and `fixture` reference in a dataset row, at any depth.
+ * A `local_file` is `{"type": "local_file", "path": "tests/Fixtures/eval/epc.pdf"}`
+ * with an optional `filename` and `content_type`; the path is relative to the app
+ * base path and may not leave it. A `fixture` is `{"type": "fixture", "name":
+ * "epc.pdf"}`, a file inside the configured fixtures folder, with the same
+ * optional keys. Resolving swaps each reference for an SDK file
  * pointing at the fixture in place, so rows stay small enough for the forked
  * processes' environments.
  */
 final readonly class LocalFixtureFiles
 {
     public const string TYPE = 'local_file';
+
+    public const string FIXTURE_TYPE = 'fixture';
 
     /**
      * @template TKey of array-key
@@ -50,7 +54,7 @@ final readonly class LocalFixtureFiles
     {
         return array_map(fn (mixed $value): mixed => match (true) {
             ! is_array($value) => $value,
-            ($value['type'] ?? null) === self::TYPE => $this->replaceReference($value, $replacement),
+            in_array($value['type'] ?? null, [self::TYPE, self::FIXTURE_TYPE], true) => $this->replaceReference($value, $replacement),
             default => $this->replace($value, $replacement),
         }, $row);
     }
@@ -61,7 +65,19 @@ final readonly class LocalFixtureFiles
      */
     private function replaceReference(array $reference, Closure $replacement): mixed
     {
-        $relative = (string) ($reference['path'] ?? '');
+        $path = $reference['type'] === self::FIXTURE_TYPE
+            ? EvalFixture::path((string) ($reference['name'] ?? ''))
+            : $this->localFilePath((string) ($reference['path'] ?? ''));
+
+        return $replacement(
+            $path,
+            (string) ($reference['filename'] ?? basename($path)),
+            (string) ($reference['content_type'] ?? (Filesystem::mimeType($path) ?: 'application/octet-stream')),
+        );
+    }
+
+    private function localFilePath(string $relative): string
+    {
         $path = realpath(base_path($relative));
 
         if ($path === false || ! is_file($path)) {
@@ -72,10 +88,6 @@ final readonly class LocalFixtureFiles
             throw new RuntimeException("Eval fixture file [{$relative}] is outside the application base path.");
         }
 
-        return $replacement(
-            $path,
-            (string) ($reference['filename'] ?? basename($path)),
-            (string) ($reference['content_type'] ?? (Filesystem::mimeType($path) ?: 'application/octet-stream')),
-        );
+        return $path;
     }
 }

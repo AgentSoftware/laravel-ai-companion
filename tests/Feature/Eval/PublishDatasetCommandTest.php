@@ -87,6 +87,44 @@ it('uploads each fixture and inserts the rows with their attachment references',
         && $request['events'][1]['input']['document']['filename'] === 'epc-two.pdf');
 });
 
+it('uploads a fixture reference exactly like a local_file reference', function (): void {
+    File::ensureDirectoryExists(base_path('resources/ai/fixtures'));
+    File::put(base_path('resources/ai/fixtures/epc.pdf'), '%PDF-1.4 epc');
+    File::put(base_path('fixtures/epc-dataset.json'), json_encode([[
+        'id' => 'epc-1',
+        'by_fixture' => ['type' => 'fixture', 'name' => 'epc.pdf'],
+        'by_path' => ['type' => 'local_file', 'path' => 'resources/ai/fixtures/epc.pdf'],
+    ]]));
+    fakeBraintrustDatasetPublishing();
+
+    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json'])->assertSuccessful();
+
+    $uploads = Http::recorded(fn (Request $request): bool => $request->url() === 'https://api.braintrust.dev/attachment');
+    $keys = $uploads->map(fn (array $pair): string => $pair[0]['key'])->values();
+    expect($uploads)->toHaveCount(2);
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/insert')
+        && $request['events'][0]['input'] === [
+            'by_fixture' => ['type' => 'braintrust_attachment', 'filename' => 'epc.pdf', 'content_type' => 'application/pdf', 'key' => $keys[0]],
+            'by_path' => ['type' => 'braintrust_attachment', 'filename' => 'epc.pdf', 'content_type' => 'application/pdf', 'key' => $keys[1]],
+        ]);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT' && $request->body() === '%PDF-1.4 epc');
+
+    File::deleteDirectory(base_path('resources/ai'));
+});
+
+it('counts fixture references in a dry run', function (): void {
+    File::ensureDirectoryExists(base_path('resources/ai/fixtures'));
+    File::put(base_path('resources/ai/fixtures/epc.pdf'), '%PDF-1.4 epc');
+    File::put(base_path('fixtures/epc-dataset.json'), json_encode([['id' => 'epc-1', 'document' => ['type' => 'fixture', 'name' => 'epc.pdf']]]));
+
+    $this->artisan('ai:publish-dataset', ['path' => 'fixtures/epc-dataset.json', '--dry-run' => true])
+        ->expectsOutputToContain('would publish 1 row(s) and upload 1 file(s)')
+        ->assertSuccessful();
+
+    File::deleteDirectory(base_path('resources/ai'));
+});
+
 it('publishes to the named dataset', function (): void {
     fakeBraintrustDatasetPublishing();
 
