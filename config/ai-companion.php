@@ -52,6 +52,9 @@ return [
             'provider' => env('AI_COMPANION_EVAL_JUDGE_PROVIDER'),
             'model' => env('AI_COMPANION_EVAL_JUDGE_MODEL'),
         ],
+        // Folder for eval fixture files, relative to base_path(). Dataset rows
+        // reference them with {"type": "fixture", "name": "epc.pdf"}.
+        'fixtures_path' => 'resources/ai/fixtures',
         // Where scored NDJSON is written when no Braintrust key is set.
         'output_path' => storage_path('app/braintrust'),
         // Where the scaffold command looks for Agent implementations.

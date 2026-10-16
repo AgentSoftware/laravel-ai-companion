@@ -163,6 +163,16 @@ AI_COMPANION_TRACING_EXPORTER=my-backend
 
 Run an AI agent over a dataset, score each output, and push a [Braintrust](https://www.braintrust.dev) experiment — or write scored NDJSON when no Braintrust key is set. The package owns the run loop, scoring, reporting, and export; your app provides the agents, datasets, and a thin harness.
 
+No `ai:eval` command ships with the package: `RunEvalCommand` is abstract, so your app adds a one-line subclass that names the command (the `ai:eval` used below is that subclass; see [Running](#running) for the full signature):
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Commands\RunEvalCommand;
+use Illuminate\Console\Attributes\Signature;
+
+#[Signature('ai:eval {target?} {--dataset=} {--out=} {--provider=} {--model=} {--tag=} {--limit=} {--trials=1} {--concurrency=5} {--timeout=}')]
+final class EvalCommand extends RunEvalCommand {}
+```
+
 ### Configure
 
 Point the `eval` block in `config/ai-companion.php` at your app's classes:
@@ -174,10 +184,29 @@ Point the `eval` block in `config/ai-companion.php` at your app's classes:
     'targets'  => [App\Eval\SummaryTarget::class],                 // agents to evaluate
     'judge'    => ['provider' => null, 'model' => null],           // LLM-judge override; null = cheapest
     'output_path' => storage_path('app/braintrust'),              // NDJSON fallback dir
+    'fixtures_path' => 'resources/ai/fixtures',                    // eval fixture files, relative to base_path()
 ],
 ```
 
 ### The harness
+
+An agent target needs a harness: with no `eval.harness` set, `ai:eval` stops with "No eval harness configured". Classifier targets do not need one. The smallest harness boots nothing:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalEnvironment;
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\EvalHarness;
+
+final class EmptyEnvironment implements EvalEnvironment {}
+
+final class AppHarness implements EvalHarness
+{
+    public function boot(array $row): EvalEnvironment { return new EmptyEnvironment; }
+    public function context(EvalEnvironment $environment): ?object { return null; }
+    public function experimentMetadata(): array { return []; }
+}
+```
+
+Set `'harness' => App\Eval\AppHarness::class` under `eval` in `config/ai-companion.php`.
 
 The package never touches your models. Your harness boots a throwaway world for each dataset row and returns an `EvalEnvironment` (a marker your environment class implements). Each row runs inside a transaction that is rolled back, so an eval leaves no trace.
 
@@ -259,6 +288,208 @@ final class SummaryTarget implements EvalTarget, FiltersDatasetRows
 
 The runner applies `includeRow()` right after loading the dataset, so exclusion happens **before** `--tag` and `--limit` (`--limit=5` means five included rows, not five rows of which some were dropped). It prints `Skipped N rows (excluded by target).` when any rows were excluded.
 
+#### Sending a file to the agent
+
+An agent that reads a document or image (an EPC certificate PDF, say) gets it through `HasPromptAttachments`. The runner passes the result as the prompt's attachments; targets that implement only `EvalTarget` send text alone.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
+
+final class EpcReportTarget implements EvalTarget, HasPromptAttachments
+{
+    // …
+
+    public function promptInput(array $row): string { return 'Read this certificate.'; }
+
+    public function promptAttachments(array $row): array
+    {
+        return [$row['document']];   // already a LocalDocument, see below
+    }
+}
+```
+
+A dataset row points at a fixture kept in the repo with a `local_file` reference, anywhere in the row. `path` is relative to the app base path and may not leave it; `filename` and `content_type` are optional (the content type is sniffed from the file).
+
+```json
+[
+  {
+    "id": "epc-band-c",
+    "document": { "type": "local_file", "path": "tests/Fixtures/eval/epc-band-c.pdf" },
+    "expected": { "current_energy_rating": "C" },
+    "tags": ["epc"]
+  }
+]
+```
+
+Before the rows run, every reference is replaced with a `LocalImage` (an `image/*` content type) or a `LocalDocument` pointing at the file in place. Only the path travels to the forked processes, never the bytes. This works the same for a local JSON dataset and for a Braintrust dataset (see below). `includeRow()` on `FiltersDatasetRows` still sees the raw reference.
+
+#### The fixtures folder
+
+Keep fixture files in `resources/ai/fixtures/`, next to `resources/ai/scorers/`, and refer to them by name with a `fixture` row instead of a path. Change the folder with `ai-companion.eval.fixtures_path` (relative to the app base path).
+
+```json
+{ "type": "fixture", "name": "epc/sample-1.pdf" }
+```
+
+A `fixture` resolves to the same `LocalImage` or `LocalDocument` as the equivalent `local_file`, takes the same optional `filename` and `content_type`, and is uploaded by `ai:publish-dataset` exactly like a `local_file`. The name may include subfolders but may not leave the fixtures folder. `local_file` keeps working for files kept elsewhere.
+
+Fixtures are committed to the repo, so use anonymised samples and never a customer's file.
+
+A worked example for an EPC reader. The agent:
+
+```php
+final class EpcReportAgent implements Agent
+{
+    use Promptable;
+
+    public function instructions(): string
+    {
+        return 'Read the attached energy performance certificate and report its current rating.';
+    }
+}
+```
+
+The target sends the row's file with `HasPromptAttachments`:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
+
+final class EpcReportTarget implements EvalTarget, HasPromptAttachments
+{
+    // key(), label(), defaultDataset() and scorers() as above
+
+    public function agent(EvalEnvironment $environment, array $row = []): Agent
+    {
+        return new EpcReportAgent;
+    }
+
+    public function promptInput(array $row): string
+    {
+        return 'Read this certificate.';
+    }
+
+    public function promptAttachments(array $row): array
+    {
+        return [$row['document']];
+    }
+}
+```
+
+`resources/ai/fixtures/epc/sample-1.pdf` is the anonymised certificate, and the dataset row names it:
+
+```json
+[
+  {
+    "id": "epc-sample-1",
+    "document": { "type": "fixture", "name": "epc/sample-1.pdf" },
+    "expected": { "current_energy_rating": "C" },
+    "tags": ["epc"]
+  }
+]
+```
+
+Run it with `php artisan ai:eval epc-report`. Publish it so teammates and CI can run it without the files, which uploads `sample-1.pdf` as a Braintrust attachment:
+
+```bash
+php artisan ai:publish-dataset resources/ai/datasets/epc.json --name=epc-reports
+php artisan ai:eval epc-report --dataset=braintrust:epc-reports
+```
+
+A target that would rather take a plain filename from the row (`"file": "epc/sample-1.pdf"`) can build the file itself with `EvalFixture`. `ai:publish-dataset` does not upload a plain string, so such a row only runs where the fixtures folder is checked out.
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\EvalFixture;
+
+EvalFixture::path('epc/sample-1.pdf');   // absolute path, string
+EvalFixture::file('epc/sample-1.pdf');   // LocalImage|LocalDocument, ready to return from promptAttachments()
+```
+
+Both throw when the name does not exist or leaves the fixtures folder.
+
+Before the rows run, every reference is replaced with a `LocalImage` (an `image/*` content type) or a `LocalDocument` pointing at the file in place. Only the path travels to the forked processes, never the bytes. This works the same for a local JSON dataset and for a Braintrust dataset (see below). `includeRow()` on `FiltersDatasetRows` still sees the raw reference.
+
+#### The fixtures folder
+
+Keep fixture files in `resources/ai/fixtures/`, next to `resources/ai/scorers/`, and refer to them by name with a `fixture` row instead of a path. Change the folder with `ai-companion.eval.fixtures_path` (relative to the app base path).
+
+```json
+{ "type": "fixture", "name": "epc/sample-1.pdf" }
+```
+
+A `fixture` resolves to the same `LocalImage` or `LocalDocument` as the equivalent `local_file`, takes the same optional `filename` and `content_type`, and is uploaded by `ai:publish-dataset` exactly like a `local_file`. The name may include subfolders but may not leave the fixtures folder. `local_file` keeps working for files kept elsewhere.
+
+A target that prefers to take a plain filename from the row can build the file itself:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\EvalFixture;
+
+EvalFixture::path('epc.pdf');   // absolute path, string
+EvalFixture::file('epc.pdf');   // LocalImage|LocalDocument, ready for HasPromptAttachments
+```
+
+Fixtures are committed to the repo, so use anonymised samples and never a customer's file.
+
+A worked example for an EPC reader. The agent:
+
+```php
+final class EpcReportAgent implements Agent
+{
+    use Promptable;
+
+    public function instructions(): string
+    {
+        return 'Read the attached energy performance certificate and report its current rating.';
+    }
+}
+```
+
+The target takes the filename from the row:
+
+```php
+use AgentSoftware\LaravelAiCompanion\Eval\Contracts\HasPromptAttachments;
+use AgentSoftware\LaravelAiCompanion\Eval\EvalFixture;
+
+final class EpcReportTarget implements EvalTarget, HasPromptAttachments
+{
+    // key(), label(), defaultDataset() and scorers() as above
+
+    public function agent(EvalEnvironment $environment, array $row = []): Agent
+    {
+        return new EpcReportAgent;
+    }
+
+    public function promptInput(array $row): string
+    {
+        return 'Read this certificate.';
+    }
+
+    public function promptAttachments(array $row): array
+    {
+        return [EvalFixture::file($row['file'])];
+    }
+}
+```
+
+`resources/ai/fixtures/epc/sample-1.pdf` is the anonymised certificate, and the dataset row names it:
+
+```json
+[
+  {
+    "id": "epc-sample-1",
+    "file": "epc/sample-1.pdf",
+    "expected": { "current_energy_rating": "C" },
+    "tags": ["epc"]
+  }
+]
+```
+
+Run it with `php artisan ai:eval epc-report`. To share the dataset, a row has to use a `fixture` or `local_file` reference for `ai:publish-dataset` to upload it (a plain `"file": "epc/sample-1.pdf"` is just text to the publisher). Use `{ "type": "fixture", "name": "epc/sample-1.pdf" }` and take the file from `$row['document']` instead, as in the example above:
+
+```bash
+php artisan ai:publish-dataset resources/ai/datasets/epc.json --name=epc-reports
+php artisan ai:eval epc-report --dataset=braintrust:epc-reports
+```
+
 ### Classifier targets
 
 To evaluate a classification (`Laravel\Ai\Classification`) instead of an agent, implement `ClassifierEvalTarget`. It has the same `key()`, `label()`, `defaultDataset()` and `scorers()`, plus `classification()`, which turns a row into the state, the keyed questions, any attachments, and the answers the row expects. The runner classifies each row with `--provider` / `--model`, so one dataset can be compared across TypeSafe, OpenAI and OpenRouter. Classifier targets need no harness; when one is configured, its `experimentMetadata()` is still recorded. One target can serve many decisions by switching on a row field:
@@ -306,7 +537,7 @@ A row's `expected` is keyed by question: a bare answer, or an object with an `an
 
 #### Datasets in Braintrust
 
-Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `LocalImage` (or `LocalDocument`), so the target passes the field straight to `attachments`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`, into a private temporary directory that is deleted when the run ends.
+Rows that must stay out of git (photos, say) can live in a Braintrust dataset in the configured project: pass `--dataset=braintrust:<dataset name>` (or return it from `defaultDataset()`). Each row is the event's `input`, plus its `expected` and `tags` when the input carries none. Before the rows run, every `braintrust_attachment` reference in them, at any depth, is downloaded with the configured key and replaced with a `LocalImage` (or `LocalDocument`), so the target passes the field straight to `attachments`. The same applies to a Braintrust dataset row in an agent target: return the field from `promptAttachments()`. Each attachment is downloaded once per run, and only for rows left after `--tag` / `--limit`, into a private temporary directory that is deleted when the run ends.
 
 ```json
 [
@@ -316,6 +547,19 @@ Rows that must stay out of git (photos, say) can live in a Braintrust dataset in
 ```
 
 The run prints each score's mean and a confusion matrix per question, and exports input (state and questions), output (each answer with its probabilities), expected and scores to Braintrust as `{key}/{dataset}/{provider}/{model}`. Any `blocking` score below 1.0 (a missed must-catch row) fails the command after the results are exported, and so does any classification row that fails to run, since its gates were never measured.
+
+#### Publishing fixtures to Braintrust
+
+To share a dataset that has fixture files (teammates, CI) without committing the files, publish it:
+
+```bash
+php artisan ai:publish-dataset tests/Fixtures/eval/epc.json --name=epc-reports
+php artisan ai:eval epc-report --dataset=braintrust:epc-reports
+```
+
+`ai:publish-dataset {path} {--name=} {--replace} {--dry-run}` finds or creates the dataset in the configured project (`--name` defaults to the file name), skips rows whose `id` is already in it, uploads each `local_file` and `fixture` file of the remaining rows as a Braintrust attachment, and inserts the rows with a `braintrust_attachment` reference in their place. Give every row an `id`: a row without one is given a hash of its content, so editing it publishes a new row. `--replace` re-inserts rows that already exist (same id) instead of skipping them. Every upload creates a new attachment, so `--replace` uploads each file again under a new key and the previous attachment is orphaned: Braintrust has no attachment delete endpoint. `--dry-run` checks that every fixture exists and counts rows and files without calling Braintrust.
+
+The upload is Braintrust's own attachment protocol: `POST /attachment` for a presigned URL, a `PUT` of the bytes to it, then `POST /attachment/status`. Azure-hosted Braintrust needs extra blob headers and is refused with an error.
 
 ### Scorers
 
