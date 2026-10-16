@@ -185,7 +185,7 @@ it('fails the run when a classification fails, without stopping the other rows',
         : ['gas' => new BooleanAnswer(0.9)]);
     writeClassifierDataset([
         ['decision' => 'hazard', 'state' => 'Gas smell', 'expected' => ['gas' => true]],
-        ['decision' => 'hazard', 'state' => ['report' => 'Photo of the meter'], 'attachments' => [['type' => 'remote-image', 'url' => 'https://example.test/meter.jpg']]],
+        ['decision' => 'hazard', 'state' => ['report' => 'Photo of the meter']],
     ]);
 
     $status = Artisan::call('stub:eval', ['target' => 'stub-classifier', '--dataset' => classifierDatasetPath(), '--out' => $this->out]);
