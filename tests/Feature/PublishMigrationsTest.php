@@ -22,7 +22,7 @@ it('publishes every package migration with vendor:publish', function () {
     $this->app->useDatabasePath($databasePath);
 
     $migrationNames = fn (string $directory): array => collect(File::files($directory))
-        ->map(fn (SplFileInfo $file): string => preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_/', '', $file->getFilename()))
+        ->map(fn (SplFileInfo $file): string => preg_replace('/^(\d{4}_\d{2}_\d{2}_\d{6}_)+/', '', $file->getFilename()))
         ->sort()
         ->values()
         ->all();
