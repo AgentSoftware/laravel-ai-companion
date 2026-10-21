@@ -21,6 +21,7 @@ use AgentSoftware\LaravelAiCompanion\Tracing\Listeners\ExportTrace;
 use AgentSoftware\LaravelAiCompanion\Tracing\TraceTimings;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\Console\VendorPublishCommand;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Events\AgentPrompted;
 use Spatie\LaravelPackageTools\Package;
@@ -33,12 +34,16 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-ai-companion')
             ->hasConfigFile('ai-companion')
-            ->hasCommands(ScaffoldEvalCommand::class, PublishEvalCommand::class, PublishDatasetCommand::class)
-            ->discoversMigrations();
+            ->hasCommands(ScaffoldEvalCommand::class, PublishEvalCommand::class, PublishDatasetCommand::class);
     }
 
     public function packageBooted(): void
     {
+        $this->callAfterResolving(VendorPublishCommand::class, function (): void {
+            $this->package->discoversMigrations();
+            $this->bootPackageMigrations();
+        });
+
         if (config('ai-companion.token_usage.enabled', true)) {
             Event::listen(AgentPrompted::class, RecordAgentTokenUsage::class);
         }
