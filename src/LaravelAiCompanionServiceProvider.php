@@ -39,8 +39,6 @@ class LaravelAiCompanionServiceProvider extends PackageServiceProvider
 
     public function packageBooted(): void
     {
-        // Discovering migrations globs the app's database/migrations once per package migration,
-        // so only do it when vendor:publish is about to read the publish groups.
         $this->callAfterResolving(VendorPublishCommand::class, function (): void {
             $this->package->discoversMigrations();
             $this->bootPackageMigrations();
